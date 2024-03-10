@@ -13,37 +13,49 @@ module Solargraph
     autoload :Gemspec, 'solargraph/convention/gemspec'
     autoload :Rakefile, 'solargraph/convention/rakefile'
 
-    @@conventions = Set.new
-
-    # @param convention [Class<Convention::Base>]
-    # @return [void]
-    def self.register convention
-      @@conventions.add convention.new
-    end
-
-    # @param source_map [SourceMap]
-    # @return [Environ]
-    def self.for_local(source_map)
-      result = Environ.new
-      @@conventions.each do |conv|
-        result.merge conv.local(source_map)
+    class << self
+      def conventions
+        @conventions ||= Set.new
       end
-      result
-    end
 
-    # @param yard_map [YardMap]
-    # @return [Environ]
-    def self.for_global(yard_map)
-      result = Environ.new
-      @@conventions.each do |conv|
-        result.merge conv.global(yard_map)
+      # @param convention [Class<Convention::Base>]
+      # @return [void]
+      def register convention
+        conventions.add convention.new
       end
-      result
+
+      def clear_conventions
+        conventions.clear
+      end
+
+      def register_defaults
+        register Gemfile
+        register Gemspec
+        register Rspec
+        register Rakefile
+      end
+
+      # @param source_map [SourceMap]
+      # @return [Environ]
+      def for_local(source_map)
+        result = Environ.new
+        conventions.each do |conv|
+          result.merge conv.local(source_map)
+        end
+        result
+      end
+
+      # @param yard_map [YardMap]
+      # @return [Environ]
+      def for_global(yard_map)
+        result = Environ.new
+        conventions.each do |conv|
+          result.merge conv.global(yard_map)
+        end
+        result
+      end
     end
 
-    register Gemfile
-    register Gemspec
-    register Rspec
-    register Rakefile
+    register_defaults
   end
 end

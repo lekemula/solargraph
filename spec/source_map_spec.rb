@@ -31,6 +31,36 @@ describe Solargraph::SourceMap do
     expect(pin).to be_a(Solargraph::Pin::Block)
   end
 
+  it "locates block pins from convention" do
+    Solargraph::Convention.register(Class.new(Solargraph::Convention::Base) do
+      def global(_source_map); Solargraph::Environ.new end
+      def local(_source_map)
+        Solargraph::Environ.new(pins: [
+          Solargraph::Pin::Block.new(
+            closure: Solargraph::Pin::Namespace.new(name: 'DynamicModule::Test'),
+            location: Solargraph::Location.new(
+              'test.rb',
+              Solargraph::Range.from_to(2, 0, 4, 11)
+            ),
+          )
+        ])
+      end
+    end)
+
+    map = Solargraph::SourceMap.load_string(%(
+      class Foo
+        dynamic_module :test do
+          test
+        end
+      end
+    ), 'test.rb')
+    pin = map.locate_block_pin(3, 13)
+    expect(pin).to be_a(Solargraph::Pin::Block)
+    expect(pin.namespace).to eq('DynamicModule::Test')
+    Solargraph::Convention.clear_conventions
+    Solargraph::Convention.register_defaults
+  end
+
   it "merges comment changes" do
     map1 = Solargraph::SourceMap.load_string(%(
       class Foo
