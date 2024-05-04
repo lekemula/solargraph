@@ -13,7 +13,7 @@ module Solargraph
             # rspec's YARD documentation.
             # @todo The return types have been fixed (https://github.com/rspec/rspec-expectations/pull/1121)
             Solargraph::Pin::Reference::Override.method_return('RSpec::Matchers#expect', 'RSpec::Expectations::ExpectationTarget')
-          ].concat(extras)
+          ]
         )
       end
 
