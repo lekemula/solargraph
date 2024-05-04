@@ -31,7 +31,6 @@ module Solargraph
       def register_defaults
         register Gemfile
         register Gemspec
-        register Rspec
         register Rakefile
       end
 
