@@ -56,6 +56,15 @@ module Solargraph
       self
     end
 
+    def references_from pin
+      result = []
+      files = @source_map_hash.values
+      files.uniq(&:filename).each do |source|
+        result.concat(source.references(pin.name))
+      end
+      result.uniq
+    end
+
     # Catalog a bench.
     #
     # @param bench [Bench]
@@ -73,12 +82,24 @@ module Solargraph
       @rbs_maps = external_requires.map { |r| load_rbs_map(r) }
       unresolved_requires = @rbs_maps.reject(&:resolved?).map(&:library)
       yard_map.change(unresolved_requires, bench.workspace.directory, bench.workspace.source_gems)
+      process_macros(pins)
       @store = Store.new(@@core_map.pins + @rbs_maps.flat_map(&:pins) + yard_map.pins + implicit.pins + pins)
       @unresolved_requires = yard_map.unresolved_requires
       @missing_docs = yard_map.missing_docs
       @rebindable_method_names = nil
       store.block_pins.each { |blk| blk.rebind(self) }
       self
+    end
+
+    def process_macros(pins) # rubocop:disable Metrics/AbcSize
+      pins_with_macros = pins.select { |p| p.is_a?(Pin::Base) && p.macros.any? }
+      pins_with_macros.each do |pin|
+        references_from(pin).each do |ref|
+          next if pin.location.range.contain?(ref.range.start)
+          reference_line = @source_map_hash[ref.filename].source.at Range.from_to(ref.range.start.line, ref.range.start.character, ref.range.start.line + 1, 0)
+          require 'byebug'; byebug
+        end
+      end
     end
 
     def core_pins

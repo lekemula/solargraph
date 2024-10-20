@@ -60,6 +60,8 @@ module Solargraph
       Range.new(Position.new(l1, c1), Position.new(l2, c2))
     end
 
+    from_to 0, 0, 0, 0
+
     # Get a range from a node.
     #
     # @param node [RubyVM::AbstractSyntaxTree::Node, Parser::AST::Node]

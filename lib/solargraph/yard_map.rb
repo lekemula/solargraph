@@ -47,6 +47,7 @@ module Solargraph
     # @param new_source_gems [Set<String>] Gems under local development (i.e., part of the workspace)
     # @return [Boolean]
     def change new_requires, new_directory, new_source_gems
+      require 'byebug'; byebug
       return false if new_requires == base_required && new_directory == @directory && new_source_gems == @source_gems
       @gem_paths = {}
       base_required.replace new_requires
@@ -265,7 +266,7 @@ module Solargraph
       end
       Solargraph.logger.info "Loading #{spec.name} #{spec.version} from #{y}"
       load_yardoc y
-      result = Mapper.new(YARD::Registry.all, spec).map
+      result = Mapper.new(YARD::Registry.all, spec, YARD::Registry.all(:macro)).map
       raise NoYardocError, "Yardoc at #{y} is empty" if result.empty?
       if spec
         Solargraph::Cache.save 'gems', "#{spec.name}-#{spec.version}.ser", result

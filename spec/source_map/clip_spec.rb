@@ -247,6 +247,33 @@ describe Solargraph::SourceMap::Clip do
     expect(clip.infer.tag).to eq('String')
   end
 
+  it "infers methods from named macros" do
+    source = Solargraph::Source.load_string(%(
+      class Macro
+        # @!macro prop
+        #   @!method $1(value)
+        #   $3
+        #   @return [$2]
+        def self.property(name, ret_type, docstring)
+        end
+
+        property :foo, String, "create a foo"
+
+        # @!macro xyz
+        #   @!method $1
+        def self.xyz; end
+
+        xyz :a
+      end
+
+      Macro.new.foo
+    ), 'test.rb')
+    map = Solargraph::ApiMap.new
+    map.map source
+    clip = map.clip_at('test.rb', Solargraph::Position.new(18, 18))
+    expect(clip.infer.tag).to eq('String')
+  end
+
   it "infers method types from return nodes" do
     source = Solargraph::Source.load_string(%(
       def foo

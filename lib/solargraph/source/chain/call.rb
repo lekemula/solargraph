@@ -151,6 +151,7 @@ module Solargraph
         # @param locals [Array<Pin::Base>]
         # @return [Pin::ProxyType]
         def inner_process_macro pin, macro, api_map, context, locals
+          require 'byebug'; byebug
           vals = arguments.map{ |c| Pin::ProxyType.anonymous(c.infer(api_map, pin, locals)) }
           txt = macro.tag.text.clone
           if txt.empty? && macro.tag.name

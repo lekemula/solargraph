@@ -9,11 +9,18 @@ module Solargraph
 
       # @param code_objects [Array<YARD::CodeObjects::Base>]
       # @param spec [Gem::Specification]
-      def initialize code_objects, spec = nil
+      # @param macro_code_objects [Array<YARD::CodeObjects::MacroObject]
+      def initialize code_objects, spec = nil, macro_code_objects = []
         @code_objects = code_objects
         @spec = spec
         @pins = []
         @namespace_pins = {}
+        # @param macro [YARD::CodeObjects::MacroObject]
+        # @param hash [Hash{String => YARD::CodeObjects::MacroObject}]
+        # @type [Hash{String => YARD::CodeObjects::MacroObject}]
+        @macro_code_objects_by_path = macro_code_objects.each_with_object({}) do |macro, hash|
+          hash[macro.method_object.path] = macro
+        end
       end
 
       # @return [Array<Pin::Base>]
@@ -58,6 +65,7 @@ module Solargraph
             )
           end
         elsif code_object.is_a?(YARD::CodeObjects::MethodObject)
+          require 'byebug'; byebug if !@macro_code_objects_by_path[code_object.path].nil?
           closure = @namespace_pins[code_object.namespace.to_s]
           if code_object.name == :initialize && code_object.scope == :instance
             # @todo Check the visibility of <Class>.new
@@ -69,6 +77,11 @@ module Solargraph
         elsif code_object.is_a?(YARD::CodeObjects::ConstantObject)
           closure = @namespace_pins[code_object.namespace]
           result.push ToConstant.make(code_object, closure, @spec)
+        elsif code_object.is_a?(YARD::CodeObjects::MacroObject)
+          require 'byebug'; byebug if code_object.attached?
+          # TODO: Handle gem macros
+          # code_object.method_object.path
+          # code_object.method_object.scope == :class
         end
         result
       end

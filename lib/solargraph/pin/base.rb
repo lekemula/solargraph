@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'solargraph/yard_map/macro'
+
 module Solargraph
   module Pin
     # The base class for map pins.
@@ -109,7 +111,7 @@ module Solargraph
         @directives
       end
 
-      # @return [Array<YARD::Tags::MacroDirective>]
+      # @return [Array<YARD::CodeObjects::MacroObject>]
       def macros
         @macros ||= collect_macros
       end
@@ -291,8 +293,11 @@ module Solargraph
       # @return [Array<YARD::Tags::Handlers::Directive>]
       def collect_macros
         return [] unless maybe_directives?
+        require 'byebug'; byebug
         parse = Solargraph::Source.parse_docstring(comments)
-        parse.directives.select{ |d| d.tag.tag_name == 'macro' }
+        macros = parse.directives.select{ |d| d.tag.tag_name == 'macro' }
+        Solargraph::YardMap::Macro.from_directive macros.first, self
+        macros
       end
     end
   end

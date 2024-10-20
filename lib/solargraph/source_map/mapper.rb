@@ -199,6 +199,7 @@ module Solargraph
         when 'override'
           pins.push Pin::Reference::Override.new(location, directive.tag.name, docstring.tags)
         when 'macro'
+          require 'byebug'; byebug
           # @todo Handle macros
         end
       end

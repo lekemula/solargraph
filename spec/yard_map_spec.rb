@@ -112,6 +112,15 @@ describe Solargraph::YardMap do
     expect(location).to be_a(Solargraph::Location)
   end
 
+  it 'loads macros from gems' do
+    # Assuming the rspec gem exists because it's a Solargraph dependency
+    Solargraph::Cache.clear
+    yard_map = Solargraph::YardMap.new(required: ['rspec'], with_dependencies: true)
+    api_map = Solargraph::ApiMap.new
+    api_map.index yard_map.pins
+    # TODO: Add proper expecation
+  end
+
   it 'returns nil for require paths without gems' do
     yard_map = Solargraph::YardMap.new
     location = yard_map.require_reference('not_a_gem')
