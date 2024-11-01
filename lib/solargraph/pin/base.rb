@@ -109,7 +109,7 @@ module Solargraph
         @directives
       end
 
-      # @return [Array<YARD::Tags::MacroDirective>]
+      # @return [Array<Solargraph::YardMap::Macro>]
       def macros
         @macros ||= collect_macros
       end
@@ -288,11 +288,13 @@ module Solargraph
           tag1.types == tag2.types
       end
 
-      # @return [Array<YARD::Tags::Handlers::Directive>]
+      # @return [Array<Solargraph::YardMap::Macro>]
       def collect_macros
         return [] unless maybe_directives?
         parse = Solargraph::Source.parse_docstring(comments)
-        parse.directives.select{ |d| d.tag.tag_name == 'macro' }
+        parse.directives.select { |d| d.tag.tag_name == 'macro' }.map do |macro_directive|
+          Solargraph::YardMap::Macro.from_directive macro_directive, self
+        end
       end
     end
   end

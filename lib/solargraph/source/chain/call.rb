@@ -145,7 +145,7 @@ module Solargraph
         end
 
         # @param pin [Pin]
-        # @param macro [YARD::Tags::MacroDirective]
+        # @param macro [YARD::Tags::MacroDirective] - TODO: Unify this with [YardMap::Macro]
         # @param api_map [ApiMap]
         # @param context [ComplexType]
         # @param locals [Array<Pin::Base>]

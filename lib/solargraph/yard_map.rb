@@ -17,6 +17,7 @@ module Solargraph
     autoload :RdocToYard,  'solargraph/yard_map/rdoc_to_yard'
     autoload :Helpers,     'solargraph/yard_map/helpers'
     autoload :ToMethod,    'solargraph/yard_map/to_method'
+    autoload :Macro,       'solargraph/yard_map/macro'
 
     include ApiMap::BundlerMethods
 
@@ -29,6 +30,7 @@ module Solargraph
     # @param with_dependencies [Boolean]
     def initialize(required: [], directory: '', source_gems: [], with_dependencies: true)
       @with_dependencies = with_dependencies
+      @macros = []
       change required.to_set, directory, source_gems.to_set
     end
 
@@ -36,6 +38,9 @@ module Solargraph
     def pins
       @pins ||= []
     end
+
+    # @return [Array<YARD::CodeObjects::MacroObject>]
+    attr_reader :macros
 
     def with_dependencies?
       @with_dependencies ||= true unless @with_dependencies == false
@@ -266,6 +271,7 @@ module Solargraph
       Solargraph.logger.info "Loading #{spec.name} #{spec.version} from #{y}"
       load_yardoc y
       result = Mapper.new(YARD::Registry.all, spec).map
+      @macros += YARD::Registry.all(:macro) # TODO: Use them in [Solargraph::ApiMap]
       raise NoYardocError, "Yardoc at #{y} is empty" if result.empty?
       if spec
         Solargraph::Cache.save 'gems', "#{spec.name}-#{spec.version}.ser", result

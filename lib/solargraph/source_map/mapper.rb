@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'solargraph/pin'
+
 module Solargraph
   class SourceMap
     # The Mapper generates pins and other data for SourceMaps.
@@ -100,26 +102,7 @@ module Solargraph
         location = Location.new(@filename, Range.new(comment_position, comment_position))
         case directive.tag.tag_name
         when 'method'
-          namespace = closure_at(source_position) || @pins.first
-          if namespace.location.range.start.line < comment_position.line
-            namespace = closure_at(comment_position)
-          end
-          begin
-            src = Solargraph::Source.load_string("def #{directive.tag.name};end", @source.filename)
-            region = Parser::Region.new(source: src, closure: namespace)
-            gen_pin = Parser.process_node(src.node, region).first.last
-            return if gen_pin.nil?
-            # Move the location to the end of the line so it gets recognized
-            # as originating from a comment
-            shifted = Solargraph::Position.new(comment_position.line, @code.lines[comment_position.line].to_s.chomp.length)
-            # @todo: Smelly instance variable access
-            gen_pin.instance_variable_set(:@comments, docstring.all.to_s)
-            gen_pin.instance_variable_set(:@location, Solargraph::Location.new(@filename, Range.new(shifted, shifted)))
-            gen_pin.instance_variable_set(:@explicit, false)
-            @pins.push gen_pin
-          rescue Parser::SyntaxError => e
-            # @todo Handle error in directive
-          end
+          @pins.push Solargraph::YardMap::Mapper::FromMethodDirective.make(@source, @pins, source_position, comment_position, directive, @code, docstring.all.to_s)
         when 'attribute'
           return if directive.tag.name.nil?
           namespace = closure_at(source_position)
@@ -199,6 +182,7 @@ module Solargraph
         when 'override'
           pins.push Pin::Reference::Override.new(location, directive.tag.name, docstring.tags)
         when 'macro'
+          # #
           # @todo Handle macros
         end
       end

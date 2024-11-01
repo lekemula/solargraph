@@ -112,6 +112,14 @@ describe Solargraph::YardMap do
     expect(location).to be_a(Solargraph::Location)
   end
 
+  it 'loads macros from gems' do
+    Solargraph::Cache.clear
+    # Assuming the parser gem exists because it's a Solargraph dependency
+    yard_map = Solargraph::YardMap.new(required: ['rspec'], with_dependencies: true)
+    api_map = Solargraph::ApiMap.new
+    expect(yard_map.macros.count).to be > 0
+  end
+
   it 'returns nil for require paths without gems' do
     yard_map = Solargraph::YardMap.new
     location = yard_map.require_reference('not_a_gem')
