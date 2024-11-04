@@ -73,7 +73,11 @@ module Solargraph
       @rbs_maps = external_requires.map { |r| load_rbs_map(r) }
       unresolved_requires = @rbs_maps.reject(&:resolved?).map(&:library)
       yard_map.change(unresolved_requires, bench.workspace.directory, bench.workspace.source_gems)
+      start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      Solargraph.logger.info 'Processing macros started'
       macro_pins = process_macros(pins)
+      pins = pins.reject { |p| p.is_a?(Pin::Ephemeral::ClassMethodSend) }
+      Solargraph.logger.info "Processing macros finished in #{Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time} seconds"
       @store = Store.new(@@core_map.pins + @rbs_maps.flat_map(&:pins) + yard_map.pins + implicit.pins + pins + macro_pins)
       @unresolved_requires = yard_map.unresolved_requires
       @missing_docs = yard_map.missing_docs
@@ -86,21 +90,22 @@ module Solargraph
     def process_macros(pins) # rubocop:disable Metrics/AbcSize
       macro_pins = []
       pins_with_macros = pins.select { |p| p.is_a?(Pin::Base) && p.macros.any? }
-      pins_with_macros.each do |pin|
-        references_from(pin).each do |ref|
-          next if pin.location.range.contain?(ref.range.start)
-          reference_line = @source_map_hash[ref.filename].source.at Range.from_to(ref.range.start.line, ref.range.start.character, ref.range.start.line + 1, 0)
-
-          generated_directives = pin.macros.first.generate_yardoc_from(reference_line)
-          next unless generated_directives.any?
-          source_map = source_map_hash[ref.filename]
-          # located_pins = source_map.locate_block_pin(ref.range.start.character, ref.range.start.line)
-          comments = generated_directives.first.tag.text
-          # TODO: Add support for other directives
-          method_pin = Solargraph::YardMap::Mapper::FromMethodDirective.make(
-            source_map.source, source_map.pins, ref.range.start, ref.range.start, generated_directives.first, source_map.source.code, comments
-          )
-          macro_pins.push method_pin
+      dsl_method_sends = pins.select { |p| p.instance_of?(Solargraph::Pin::Ephemeral::ClassMethodSend) }
+      pins_with_macros.each do |pin_with_macro|
+        dsl_method_sends.select { |dsl_call| dsl_call.matches?(pin_with_macro) }.each do |dsl_call|
+          ref = dsl_call.location
+          pin_with_macro.macros.each do |macro|
+            macro.generate_yardoc_from(dsl_call).each do |directive|
+              source_map = source_map_hash[ref.filename]
+              # located_pins = source_map.locate_block_pin(ref.range.start.character, ref.range.start.line)
+              comments = directive.tag.text
+              # TODO: Add support for other directives
+              method_pin = Solargraph::YardMap::Mapper::FromMethodDirective.make(
+                source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
+              )
+              macro_pins.push method_pin
+            end
+          end
         end
       end
       macro_pins

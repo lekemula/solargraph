@@ -62,7 +62,7 @@ module Solargraph
         def const_nodes_from node
           return [] unless Parser.is_ast_node?(node)
           result = []
-          if [:CONST, :COLON2, :COLON3].include?(node.type)
+          if %i[CONST COLON2 COLON3].include?(node.type)
             result.push node
           else
             node.children.each { |child| result.concat const_nodes_from(child) }
@@ -70,21 +70,66 @@ module Solargraph
           result
         end
 
-        def call_nodes_from node
+        def call_nodes_from node # rubocop:disable Metrics/AbcSize,Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
           return [] unless Parser.is_ast_node?(node)
           result = []
           if node.type == :ITER
             result.push node.children[0]
-            node.children[1..-1].each { |child| result.concat call_nodes_from(child) }
+            node.children[1..].each { |child| result.concat call_nodes_from(child) }
           elsif node.type == :MASGN
             # @todo We're treating a mass assignment as a call node, but the
             #   type checker still needs the logic to handle it.
             result.push node
-          elsif [:CALL, :VCALL, :FCALL, :ATTRASGN, :OPCALL].include?(node.type)
+          elsif %i[CALL VCALL FCALL ATTRASGN OPCALL].include?(node.type)
             result.push node
             node.children.each { |child| result.concat call_nodes_from(child) }
           else
             node.children.each { |child| result.concat call_nodes_from(child) }
+          end
+          result
+        end
+
+        # Convert a DSL method call with directly inferrable simple params.
+        # @param node [RubyVM::AbstractSyntaxTree::Node]
+        # @return [String, Integer, Float, Symbol, Array, Hash, Source::Chain]
+        def simple_convert(node)
+          return nil unless node?(node)
+          case node.type
+          when :CONST
+            unpack_name(node)
+          when :LIT, :STR
+            node.children[0]
+          when :ARRAY, :ZARRAY, :LIST, :ZLIST
+            simple_convert_array(node)
+          when :HASH
+            simple_convert_hash(node)
+          else
+            Solargraph::Parser.chain(node)
+          end
+        end
+
+        def simple_convert_array node
+          return [] unless node?(node) && %i[ARRAY ZARRAY LIST ZLIST].include?(node.type)
+          return simple_convert_array(node.children[0]) if splatted_node?(node)
+          node.children.compact.map do |c|
+            simple_convert(c)
+          end
+        end
+
+        def simple_convert_hash(node) # rubocop:disable Metrics/AbcSize
+          return {} unless node?(node) && node.type == :HASH
+          return convert_hash(node.children[0].children[1]) if splatted_hash?(node)
+          return {} unless node?(node.children[0])
+          result = {}
+          index = 0
+          until index > node.children[0].children.length - 2
+            k = node.children[0].children[index]
+            return {} unless node?(k)
+            v = node.children[0].children[index + 1]
+
+            result[k.children[0]] = simple_convert(v)
+
+            index += 2
           end
           result
         end

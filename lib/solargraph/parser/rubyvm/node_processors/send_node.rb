@@ -8,35 +8,42 @@ module Solargraph
           include Rubyvm::NodeMethods
 
           def process
-            if [:private, :public, :protected].include?(node.children[0])
+            if [:private, :public, :protected].include?(method_name)
               process_visibility
-            elsif node.children[0] == :module_function
+            elsif method_name == :module_function
               process_module_function
-            elsif node.children[0] == :require
+            elsif method_name == :require
               process_require
-            elsif node.children[0] == :autoload
+            elsif method_name == :autoload
               process_autoload
-            elsif node.children[0] == :alias_method
+            elsif method_name == :alias_method
               process_alias_method
-            elsif node.children[0] == :private_class_method
+            elsif method_name == :private_class_method
               process_private_class_method
-            elsif [:attr_reader, :attr_writer, :attr_accessor].include?(node.children[0])
+            elsif [:attr_reader, :attr_writer, :attr_accessor].include?(method_name)
               process_attribute
-            elsif node.children[0] == :include
+            elsif method_name == :include
               process_include
-            elsif node.children[0] == :extend
+            elsif method_name == :extend
               process_extend
-            elsif node.children[0] == :prepend
+            elsif method_name == :prepend
               process_prepend
-            elsif node.children[0] == :private_constant
+            elsif method_name == :private_constant
               process_private_constant
-            elsif node.children[1] == :require && unpack_name(node.children[0]) == 'Bundler'
+            elsif node.children[1] == :require && unpack_name(method_name) == 'Bundler'
               pins.push Pin::Reference::Require.new(Solargraph::Location.new(region.filename, Solargraph::Range.from_to(0, 0, 0, 0)), 'bundler/require')
+            elsif dsl_method_call?
+              process_dsl_method
             end
             process_children
           end
 
           private
+
+          # @return [Symbol]
+          def method_name
+            node.children[0]
+          end
 
           # @return [void]
           def process_visibility
@@ -48,15 +55,15 @@ module Solargraph
                   matches = pins.select{ |pin| pin.is_a?(Pin::Method) && pin.name == name && pin.namespace == region.closure.full_context.namespace && pin.context.scope == (region.scope || :instance)}
                   matches.each do |pin|
                     # @todo Smelly instance variable access
-                    pin.instance_variable_set(:@visibility, node.children[0])
+                    pin.instance_variable_set(:@visibility, method_name)
                   end
                 else
-                  process_children region.update(visibility: node.children[0])
+                  process_children region.update(visibility: method_name)
                 end
               end
             else
               # @todo Smelly instance variable access
-              region.instance_variable_set(:@visibility, node.children[0])
+              region.instance_variable_set(:@visibility, method_name)
             end
           end
 
@@ -68,7 +75,7 @@ module Solargraph
               loc = get_node_location(node)
               clos = region.closure
               cmnt = comments_for(node)
-              if node.children[0] == :attr_reader || node.children[0] == :attr_accessor
+              if method_name == :attr_reader || method_name == :attr_accessor
                 pins.push Solargraph::Pin::Method.new(
                   location: loc,
                   closure: clos,
@@ -79,7 +86,7 @@ module Solargraph
                   attribute: true
                 )
               end
-              if node.children[0] == :attr_writer || node.children[0] == :attr_accessor
+              if method_name == :attr_writer || method_name == :attr_accessor
                 pins.push Solargraph::Pin::Method.new(
                   location: loc,
                   closure: clos,
@@ -271,6 +278,27 @@ module Solargraph
                 end
               end
             end
+          end
+
+          # @return [Boolean]
+          def dsl_method_call?
+            has_arguments = node.children.compact.size > 1
+            region.scope.nil? && method_name.instance_of?(Symbol) && has_arguments
+          end
+
+          # @return [void]
+          def process_dsl_method # rubocop:disable Metrics/AbcSize
+            pins.push Pin::Ephemeral::ClassMethodSend.new(
+              location: get_node_location(node),
+              closure: region.closure,
+              name: method_name,
+              code: region.source.code_for(node),
+              arguments: node.children[1].children[0..].each_with_index.map do |a, index|
+                Solargraph::Pin::Ephemeral::ClassMethodSend::ArgumentValue.new(
+                  value: simple_convert(a)
+                )
+              end
+            )
           end
         end
       end

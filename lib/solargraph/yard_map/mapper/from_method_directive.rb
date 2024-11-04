@@ -4,7 +4,7 @@ module Solargraph
   class YardMap
     # TODO: Move to DirectiveMapper
     class Mapper
-      module FromMethodDirective
+      module FromMethodDirective # rubocop:disable Style/Documentation
         module_function
 
         # @param source [Solargraph::Source]
@@ -12,10 +12,8 @@ module Solargraph
         # @param source_position [Position]
         # @param comment_position [Position]
         # @param directive [YARD::Tags::Directive]
-        # @param code [String]
-        # @param comments [String]
         # @return [Solargraph::Pin::Method]
-        def make(source, pins, source_position, comment_position, directive, code, comments)
+        def make(source, pins, source_position, comment_position, directive) # rubocop:disable Metrics/AbcSize
           namespace = closure_at(pins, source_position) || pins.first
           namespace = closure_at(pins, comment_position) if namespace.location.range.start.line < comment_position.line
           begin
@@ -26,7 +24,8 @@ module Solargraph
             # Move the location to the end of the line so it gets recognized
             # as originating from a comment
             shifted = Solargraph::Position.new(comment_position.line,
-                                               code.lines[comment_position.line].to_s.chomp.length)
+                                               source.code.lines[comment_position.line].to_s.chomp.length)
+            comments = Solargraph::Source.parse_docstring(directive.tag.text).to_docstring.all.to_s
             # @todo: Smelly instance variable access
             gen_pin.instance_variable_set(:@comments, comments)
             gen_pin.instance_variable_set(:@location,

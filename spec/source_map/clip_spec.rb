@@ -257,21 +257,33 @@ describe Solargraph::SourceMap::Clip do
         def self.property(name, ret_type, docstring)
         end
 
-        property :foo, String, "create a foo"
+        property :foo, String, "create a foo", [1, :two, '3'], test_key: 'test_value', test_key2: 3
 
-        # @!macro xyz
+        # @!macro multi_property
         #   @!method $1
-        def self.xyz; end
+        #   @!method $2
+        def self.multi_property
+          do_something
+        end
 
-        xyz :a
+        multi_property :a, :b
       end
 
       Macro.new.foo
+      Macro.new.a
+      Macro.new.b
     ), 'test.rb')
     map = Solargraph::ApiMap.new
     map.map source
-    clip = map.clip_at('test.rb', Solargraph::Position.new(18, 18))
+    clip = map.clip_at('test.rb', Solargraph::Position.new(21, 18))
+    expect(clip.define.first.path).to eq('Macro#foo')
     expect(clip.infer.tag).to eq('String')
+    clip = map.clip_at('test.rb', Solargraph::Position.new(22, 16))
+    expect(clip.define.first.path).to eq('Macro#a')
+    expect(clip.infer.tag).to eq('nil')
+    clip = map.clip_at('test.rb', Solargraph::Position.new(23, 16))
+    expect(clip.define.first.path).to eq('Macro#b')
+    expect(clip.infer.tag).to eq('nil')
   end
 
   it "infers method types from return nodes" do

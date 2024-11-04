@@ -102,7 +102,9 @@ module Solargraph
         location = Location.new(@filename, Range.new(comment_position, comment_position))
         case directive.tag.tag_name
         when 'method'
-          @pins.push Solargraph::YardMap::Mapper::FromMethodDirective.make(@source, @pins, source_position, comment_position, directive, @code, docstring.all.to_s)
+          @pins.push Solargraph::YardMap::Mapper::FromMethodDirective.make(
+            @source, @pins, source_position, comment_position, directive
+          )
         when 'attribute'
           return if directive.tag.name.nil?
           namespace = closure_at(source_position)

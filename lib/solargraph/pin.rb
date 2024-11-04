@@ -32,6 +32,7 @@ module Solargraph
     autoload :Singleton,        'solargraph/pin/singleton'
     autoload :KeywordParam,     'solargraph/pin/keyword_param'
     autoload :Search,           'solargraph/pin/search'
+    autoload :Ephemeral,        'solargraph/pin/ephemeral'
 
     ROOT_PIN = Pin::Namespace.new(type: :class, name: '', closure: nil)
   end
