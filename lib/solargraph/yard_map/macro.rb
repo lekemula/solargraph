@@ -74,6 +74,10 @@ module Solargraph
         expanded_comment = expand([class_method_send.name, *class_method_send.arguments.map(&:value).map(&:to_s)], class_method_send.code)
         Solargraph::Source.parse_docstring(expanded_comment).directives.select do |directive|
           PROCESSABLE_DIRECTIVES.include?(directive.tag.tag_name)
+        end.each do |directive|
+          if class_method_send.comments.length.positive? && directive.tag.tag_name != 'parse'
+            directive.tag.text += "\n#{class_method_send.comments}"
+          end
         end
       end
     end

@@ -293,6 +293,7 @@ module Solargraph
               closure: region.closure,
               name: method_name,
               code: region.source.code_for(node),
+              comments: comments_for(node),
               arguments: node.children[1].children[0..].each_with_index.map do |a, index|
                 Solargraph::Pin::Ephemeral::ClassMethodSend::ArgumentValue.new(
                   value: simple_convert(a)

@@ -17,13 +17,14 @@ module Solargraph
         attr_reader :code
 
         # @param name [String] - name of the method called
+        # @param comments [String] - name of the method called
         # @param arguments [Array<Argument>] - arguments of the method
         # @param code [String] - code of the method call
         # @param location [Solargraph::Location, nil]
         # @param kind [Integer]
         # @param closure [Solargraph::Pin::Closure, nil]
-        def initialize name: '', arguments: [], code:, closure: nil, **splat
-          super(closure: closure, name: name.to_s, **splat)
+        def initialize name: '', arguments: [], code:, closure: nil, comments: '', **splat
+          super(closure: closure, name: name.to_s, comments: comments, **splat)
           @arguments = arguments
           @code = code
         end

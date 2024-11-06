@@ -266,6 +266,7 @@ describe Solargraph::SourceMap::Clip do
           do_something
         end
 
+        # @return [String]
         multi_property :a, :b
       end
 
@@ -275,15 +276,15 @@ describe Solargraph::SourceMap::Clip do
     ), 'test.rb')
     map = Solargraph::ApiMap.new
     map.map source
-    clip = map.clip_at('test.rb', Solargraph::Position.new(21, 18))
+    clip = map.clip_at('test.rb', Solargraph::Position.new(22, 18))
     expect(clip.define.first.path).to eq('Macro#foo')
     expect(clip.infer.tag).to eq('String')
-    clip = map.clip_at('test.rb', Solargraph::Position.new(22, 16))
-    expect(clip.define.first.path).to eq('Macro#a')
-    expect(clip.infer.tag).to eq('nil')
     clip = map.clip_at('test.rb', Solargraph::Position.new(23, 16))
+    expect(clip.define.first.path).to eq('Macro#a')
+    expect(clip.infer.tag).to eq('String')
+    clip = map.clip_at('test.rb', Solargraph::Position.new(24, 16))
     expect(clip.define.first.path).to eq('Macro#b')
-    expect(clip.infer.tag).to eq('nil')
+    expect(clip.infer.tag).to eq('String')
   end
 
   it "completes generated attributes from attached dsl macros" do
