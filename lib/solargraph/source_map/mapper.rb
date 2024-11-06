@@ -58,12 +58,6 @@ module Solargraph
         @pins ||= []
       end
 
-      # @param position [Solargraph::Position]
-      # @return [Solargraph::Pin::Closure]
-      def closure_at(position)
-        pins.select{|pin| pin.is_a?(Pin::Closure) and pin.location.range.contain?(position)}.last
-      end
-
       def process_comment source_position, comment_position, comment
         return unless comment.encode('UTF-8', invalid: :replace, replace: '?') =~ DIRECTIVE_REGEXP
         cmnt = remove_inline_comment_hashes(comment)
@@ -96,38 +90,12 @@ module Solargraph
       # @param directive [YARD::Tags::Directive]
       # @return [void]
       def process_directive source_position, comment_position, directive
-        case directive.tag.tag_name
-        when 'method'
-          @pins += YardMap::Mapper::FromMethodDirective.make(
-            @source, @pins, source_position, comment_position, directive
-          )
-        when 'attribute'
-          @pins += YardMap::Mapper::FromAttributeDirective.make(
-            @source, @pins, source_position, comment_position, directive
-          )
-        when 'visibility'
-          @pins += YardMap::Mapper::FromVisibilityDirective.make(
-            @source, @pins, source_position, comment_position, directive
-          )
-        when 'parse'
-          @pins += YardMap::Mapper::FromParseDirective.make(
-            @source, @pins, source_position, comment_position, directive
-          )
-        when 'domain'
-          @pins += YardMap::Mapper::FromDomainDirective.make(
-            @source, @pins, source_position, comment_position, directive
-          )
-        when 'override'
-          @pins += YardMap::Mapper::FromOverrideDirective.make(
-            @source, @pins, source_position, comment_position, directive
-          )
-        when 'macro'
-          # Macros are handled right before indexing all the pins in [ApiMap]
-        end
-      end
+        directive_processor = YardMap::Directives.for(directive)
+        return unless directive_processor
 
-      def no_empty_lines?(line1, line2)
-        @code.lines[line1..line2].none? { |line| line.strip.empty? }
+        @pins += directive_processor.process_directive(
+          @source, @pins, source_position, comment_position, directive
+        )
       end
 
       def remove_inline_comment_hashes comment

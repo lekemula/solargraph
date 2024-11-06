@@ -2,9 +2,8 @@
 
 module Solargraph
   class YardMap
-    # TODO: Move to DirectiveMapper
-    class Mapper
-      module FromDomainDirective # rubocop:disable Style/Documentation
+    module Directives
+      module DomainDirective # rubocop:disable Style/Documentation
         module_function
 
         # @param source [Solargraph::Source]
@@ -13,7 +12,7 @@ module Solargraph
         # @param _comment_position [Position]
         # @param directive [YARD::Tags::Directive]
         # @return [Array<Solargraph::Pin::Method>]
-        def make(source, _pins, source_position, _comment_position, directive)
+        def process_directive(source, _pins, source_position, _comment_position, directive)
           namespace = closure_at(pins, source_position) || Pin::ROOT_PIN
           namespace.domains.concat directive.tag.types unless directive.tag.types.nil?
           []

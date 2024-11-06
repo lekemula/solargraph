@@ -2,9 +2,8 @@
 
 module Solargraph
   class YardMap
-    # TODO: Move to DirectiveMapper
-    class Mapper
-      module FromOverrideDirective # rubocop:disable Style/Documentation
+    module Directives
+      module OverrideDirective # rubocop:disable Style/Documentation
         module_function
 
         # @param source [Solargraph::Source]
@@ -13,7 +12,7 @@ module Solargraph
         # @param comment_position [Position]
         # @param directive [YARD::Tags::Directive]
         # @return [Array<Solargraph::Pin::Method>]
-        def make(source, _pins, _source_position, comment_position, directive)
+        def process_directive(source, _pins, _source_position, comment_position, directive)
           docstring = Solargraph::Source.parse_docstring(directive.tag.text).to_docstring
           location = Location.new(source.filename, Range.new(comment_position, comment_position))
           [Pin::Reference::Override.new(location, directive.tag.name, docstring.tags)]

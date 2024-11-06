@@ -97,21 +97,11 @@ module Solargraph
           pin_with_macro.macros.each do |macro|
             macro.generate_yardoc_from(dsl_call).each do |directive|
               source_map = source_map_hash[ref.filename]
-              # TODO: Add support for other directives
-              case directive.tag.tag_name
-              when 'parse'
-                macro_pins += Solargraph::YardMap::Mapper::FromParseDirective.make(
-                  source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
-                )
-              when 'attribute'
-                macro_pins += Solargraph::YardMap::Mapper::FromAttributeDirective.make(
-                  source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
-                )
-              when 'method'
-                macro_pins += Solargraph::YardMap::Mapper::FromMethodDirective.make(
-                  source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
-                )
-              end
+              directive_processor = YardMap::Directives.for(directive)
+              next unless directive_processor
+              macro_pins += directive_processor.process_directive(
+                source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
+              )
             end
           end
         end

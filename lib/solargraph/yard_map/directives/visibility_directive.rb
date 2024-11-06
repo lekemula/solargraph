@@ -2,9 +2,8 @@
 
 module Solargraph
   class YardMap
-    # TODO: Move to DirectiveMapper
-    class Mapper
-      module FromVisibilityDirective # rubocop:disable Style/Documentation
+    module Directives
+      module VisibilityDirective # rubocop:disable Style/Documentation
         module_function
 
         VALID_VISIBILITIES = %i[public protected private].freeze
@@ -15,7 +14,7 @@ module Solargraph
         # @param comment_position [Position]
         # @param directive [YARD::Tags::Directive]
         # @return [Array<Solargraph::Pin::Method>]
-        def make(source, pins, source_position, comment_position, directive)
+        def process_directive(source, pins, source_position, comment_position, directive)
           kind = directive.tag.text&.to_sym
           return unless VALID_VISIBILITIES.include?(kind)
 

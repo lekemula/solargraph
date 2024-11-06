@@ -2,9 +2,8 @@
 
 module Solargraph
   class YardMap
-    # TODO: Move to DirectiveMapper
-    class Mapper
-      module FromMethodDirective # rubocop:disable Style/Documentation
+    module Directives
+      module MethodDirective # rubocop:disable Style/Documentation
         module_function
 
         # @param source [Solargraph::Source]
@@ -13,7 +12,7 @@ module Solargraph
         # @param comment_position [Position]
         # @param directive [YARD::Tags::Directive]
         # @return [Array<Solargraph::Pin::Method>]
-        def make(source, pins, source_position, comment_position, directive) # rubocop:disable Metrics/AbcSize
+        def process_directive(source, pins, source_position, comment_position, directive) # rubocop:disable Metrics/AbcSize
           namespace = closure_at(pins, source_position) || pins.first
           namespace = closure_at(pins, comment_position) if namespace.location.range.start.line < comment_position.line
           begin
