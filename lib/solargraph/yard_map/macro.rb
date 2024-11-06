@@ -3,7 +3,7 @@
 module Solargraph
   class YardMap
     class Macro # rubocop:disable Style/Documentation
-      PROCESSABLE_DIRECTIVES = %w[method attribute].freeze
+      PROCESSABLE_DIRECTIVES = %w[method attribute parse].freeze
 
       class << self
         # @param directive [YARD::Tags::Directive]

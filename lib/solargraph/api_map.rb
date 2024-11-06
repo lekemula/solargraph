@@ -99,6 +99,10 @@ module Solargraph
               source_map = source_map_hash[ref.filename]
               # TODO: Add support for other directives
               case directive.tag.tag_name
+              when 'parse'
+                macro_pins += Solargraph::YardMap::Mapper::FromParseDirective.make(
+                  source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
+                )
               when 'attribute'
                 macro_pins += Solargraph::YardMap::Mapper::FromAttributeDirective.make(
                   source_map.source, source_map.pins, ref.range.start, ref.range.start, directive

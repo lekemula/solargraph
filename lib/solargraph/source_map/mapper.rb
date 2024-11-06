@@ -129,26 +129,9 @@ module Solargraph
             end
           end
         when 'parse'
-          begin
-            ns = closure_at(source_position)
-            src = Solargraph::Source.load_string(directive.tag.text, @source.filename)
-            region = Parser::Region.new(source: src, closure: ns)
-            # @todo These pins may need to be marked not explicit
-            index = @pins.length
-            loff = if @code.lines[comment_position.line].strip.end_with?('@!parse')
-              comment_position.line + 1
-            else
-              comment_position.line
-            end
-            Parser.process_node(src.node, region, @pins)
-            @pins[index..-1].each do |p|
-              # @todo Smelly instance variable access
-              p.location.range.start.instance_variable_set(:@line, p.location.range.start.line + loff)
-              p.location.range.ending.instance_variable_set(:@line, p.location.range.ending.line + loff)
-            end
-          rescue Parser::SyntaxError => e
-            # @todo Handle parser errors in !parse directives
-          end
+          @pins += YardMap::Mapper::FromParseDirective.make(
+            @source, @pins, source_position, comment_position, directive
+          )
         when 'domain'
           namespace = closure_at(source_position) || Pin::ROOT_PIN
           namespace.domains.concat directive.tag.types unless directive.tag.types.nil?

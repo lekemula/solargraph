@@ -310,6 +310,31 @@ describe Solargraph::SourceMap::Clip do
     expect(clip.define.first.path).to eq('Macro#foo=')
   end
 
+  it "completes generated parsed methods from attached dsl macros" do
+    source = Solargraph::Source.load_string(%(
+      class Macro
+        # @!macro prop
+        #   @!parse
+        #     module SomeNamespace
+        #       # @return [$2]
+        #       def self.$1(value)
+        #       end
+        #     end
+        def self.property(name, ret_type, docstring)
+        end
+
+        property :foo, String, "create a foo"
+      end
+
+      Macro::SomeNamespace.foo
+    ), 'test.rb')
+    map = Solargraph::ApiMap.new
+    map.map source
+    clip = map.clip_at('test.rb', Solargraph::Position.new(15, 29))
+    expect(clip.define.first.path).to eq('Macro::SomeNamespace.foo')
+    expect(clip.infer.tag).to eq('String')
+  end
+
   it "infers method types from return nodes" do
     source = Solargraph::Source.load_string(%(
       def foo
