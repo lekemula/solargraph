@@ -3,6 +3,8 @@
 module Solargraph
   class YardMap
     class Macro # rubocop:disable Style/Documentation
+      PROCESSABLE_DIRECTIVES = %w[method attribute].freeze
+
       class << self
         # @param directive [YARD::Tags::Directive]
         # @param method_pin [Pin::Method]
@@ -71,7 +73,7 @@ module Solargraph
       def generate_yardoc_from(class_method_send)
         expanded_comment = expand([class_method_send.name, *class_method_send.arguments.map(&:value).map(&:to_s)], class_method_send.code)
         Solargraph::Source.parse_docstring(expanded_comment).directives.select do |directive|
-          directive.tag.tag_name == 'method'
+          PROCESSABLE_DIRECTIVES.include?(directive.tag.tag_name)
         end
       end
     end

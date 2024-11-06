@@ -7,6 +7,7 @@ module Solargraph
       autoload :ToNamespace, 'solargraph/yard_map/mapper/to_namespace'
       autoload :ToConstant, 'solargraph/yard_map/mapper/to_constant'
       autoload :FromMethodDirective, 'solargraph/yard_map/mapper/from_method_directive'
+      autoload :FromAttributeDirective, 'solargraph/yard_map/mapper/from_attribute_directive'
 
       # @param code_objects [Array<YARD::CodeObjects::Base>]
       # @param spec [Gem::Specification]

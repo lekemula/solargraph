@@ -97,13 +97,17 @@ module Solargraph
           pin_with_macro.macros.each do |macro|
             macro.generate_yardoc_from(dsl_call).each do |directive|
               source_map = source_map_hash[ref.filename]
-              # located_pins = source_map.locate_block_pin(ref.range.start.character, ref.range.start.line)
-              comments = directive.tag.text
               # TODO: Add support for other directives
-              method_pin = Solargraph::YardMap::Mapper::FromMethodDirective.make(
-                source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
-              )
-              macro_pins.push method_pin
+              case directive.tag.tag_name
+              when 'attribute'
+                macro_pins += Solargraph::YardMap::Mapper::FromAttributeDirective.make(
+                  source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
+                )
+              when 'method'
+                macro_pins += Solargraph::YardMap::Mapper::FromMethodDirective.make(
+                  source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
+                )
+              end
             end
           end
         end

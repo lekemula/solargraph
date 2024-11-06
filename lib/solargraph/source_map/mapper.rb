@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'solargraph/pin'
-
 module Solargraph
   class SourceMap
     # The Mapper generates pins and other data for SourceMaps.
@@ -102,40 +100,13 @@ module Solargraph
         location = Location.new(@filename, Range.new(comment_position, comment_position))
         case directive.tag.tag_name
         when 'method'
-          @pins.push Solargraph::YardMap::Mapper::FromMethodDirective.make(
+          @pins += YardMap::Mapper::FromMethodDirective.make(
             @source, @pins, source_position, comment_position, directive
           )
         when 'attribute'
-          return if directive.tag.name.nil?
-          namespace = closure_at(source_position)
-          t = (directive.tag.types.nil? || directive.tag.types.empty?) ? nil : directive.tag.types.flatten.join('')
-          if t.nil? || t.include?('r')
-            pins.push Solargraph::Pin::Method.new(
-              location: location,
-              closure: namespace,
-              name: directive.tag.name,
-              comments: docstring.all.to_s,
-              scope: namespace.is_a?(Pin::Singleton) ? :class : :instance,
-              visibility: :public,
-              explicit: false,
-              attribute: true
-            )
-          end
-          if t.nil? || t.include?('w')
-            pins.push Solargraph::Pin::Method.new(
-              location: location,
-              closure: namespace,
-              name: "#{directive.tag.name}=",
-              comments: docstring.all.to_s,
-              scope: namespace.is_a?(Pin::Singleton) ? :class : :instance,
-              visibility: :public,
-              attribute: true
-            )
-            pins.last.parameters.push Pin::Parameter.new(name: 'value', decl: :arg, closure: pins.last)
-            if pins.last.return_type.defined?
-              pins.last.docstring.add_tag YARD::Tags::Tag.new(:param, '', pins.last.return_type.to_s.split(', '), 'value')
-            end
-          end
+          @pins += YardMap::Mapper::FromAttributeDirective.make(
+            @source, @pins, source_position, comment_position, directive
+          )
         when 'visibility'
           begin
             kind = directive.tag.text&.to_sym
@@ -184,8 +155,7 @@ module Solargraph
         when 'override'
           pins.push Pin::Reference::Override.new(location, directive.tag.name, docstring.tags)
         when 'macro'
-          # #
-          # @todo Handle macros
+          # Macros are handled right before indexing all the pins in [ApiMap]
         end
       end
 
