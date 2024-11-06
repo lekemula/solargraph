@@ -96,8 +96,6 @@ module Solargraph
       # @param directive [YARD::Tags::Directive]
       # @return [void]
       def process_directive source_position, comment_position, directive
-        docstring = Solargraph::Source.parse_docstring(directive.tag.text).to_docstring
-        location = Location.new(@filename, Range.new(comment_position, comment_position))
         case directive.tag.tag_name
         when 'method'
           @pins += YardMap::Mapper::FromMethodDirective.make(
@@ -108,35 +106,21 @@ module Solargraph
             @source, @pins, source_position, comment_position, directive
           )
         when 'visibility'
-          begin
-            kind = directive.tag.text&.to_sym
-            return unless [:private, :protected, :public].include?(kind)
-
-            name = directive.tag.name
-            closure = closure_at(source_position) || @pins.first
-            if closure.location.range.start.line < comment_position.line
-              closure = closure_at(comment_position)
-            end
-            if closure.is_a?(Pin::Method) && no_empty_lines?(comment_position.line, source_position.line)
-              # @todo Smelly instance variable access
-              closure.instance_variable_set(:@visibility, kind)
-            else
-              matches = pins.select{ |pin| pin.is_a?(Pin::Method) && pin.name == name && pin.namespace == namespace && pin.context.scope == namespace.is_a?(Pin::Singleton) ? :class : :instance }
-              matches.each do |pin|
-                # @todo Smelly instance variable access
-                pin.instance_variable_set(:@visibility, kind)
-              end
-            end
-          end
+          @pins += YardMap::Mapper::FromVisibilityDirective.make(
+            @source, @pins, source_position, comment_position, directive
+          )
         when 'parse'
           @pins += YardMap::Mapper::FromParseDirective.make(
             @source, @pins, source_position, comment_position, directive
           )
         when 'domain'
-          namespace = closure_at(source_position) || Pin::ROOT_PIN
-          namespace.domains.concat directive.tag.types unless directive.tag.types.nil?
+          @pins += YardMap::Mapper::FromDomainDirective.make(
+            @source, @pins, source_position, comment_position, directive
+          )
         when 'override'
-          pins.push Pin::Reference::Override.new(location, directive.tag.name, docstring.tags)
+          @pins += YardMap::Mapper::FromOverrideDirective.make(
+            @source, @pins, source_position, comment_position, directive
+          )
         when 'macro'
           # Macros are handled right before indexing all the pins in [ApiMap]
         end
