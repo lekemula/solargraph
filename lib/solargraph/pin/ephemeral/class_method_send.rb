@@ -33,6 +33,11 @@ module Solargraph
           @path ||= "#{namespace}.#{name}"
         end
 
+        # @return [Array<String>] - normal, keyword and array arguments as a flat array of strings
+        def argument_values
+          @arguments.map(&:value).map { |a| Array(a) }.flatten.map(&:to_s)
+        end
+
         # @return [Pin::Method]
         def matches?(method_pin)
           return false unless method_pin.is_a?(Method)
