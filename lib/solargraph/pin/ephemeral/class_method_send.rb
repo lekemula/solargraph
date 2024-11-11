@@ -42,7 +42,7 @@ module Solargraph
         def matches?(method_pin)
           return false unless method_pin.is_a?(Method)
 
-          method_pin.path.include?(name)
+          method_pin.name == name
         end
       end
     end
