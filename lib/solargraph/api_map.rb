@@ -86,23 +86,18 @@ module Solargraph
       self
     end
 
+    # @param pins [Array<Pin::Base>]
     # @return [Array<Pin::Method>]
     def process_macros(pins) # rubocop:disable Metrics/AbcSize
       macro_pins = []
       pins_with_macros = pins.select { |p| p.is_a?(Pin::Base) && p.macros.any? }
       dsl_method_sends = pins.select { |p| p.instance_of?(Solargraph::Pin::Ephemeral::ClassMethodSend) }
       pins_with_macros.each do |pin_with_macro|
-        dsl_method_sends.select { |dsl_call| dsl_call.matches?(pin_with_macro) }.each do |dsl_call|
-          ref = dsl_call.location
+        dsl_method_sends.select { |dsl_method_send| dsl_method_send.matches?(pin_with_macro) }.each do |dsl_method_send|
+          ref = dsl_method_send.location
+          source_map = source_map_hash[ref.filename]
           pin_with_macro.macros.each do |macro|
-            macro.generate_yardoc_from(dsl_call).each do |directive|
-              source_map = source_map_hash[ref.filename]
-              directive_processor = YardMap::Directives.for(directive)
-              next unless directive_processor
-              macro_pins += directive_processor.process_directive(
-                source_map.source, source_map.pins, ref.range.start, ref.range.start, directive
-              )
-            end
+            macro_pins += macro.generate_pins_from(dsl_method_send, source_map)
           end
         end
       end

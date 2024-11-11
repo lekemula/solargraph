@@ -11,7 +11,7 @@ module Solargraph
       autoload :VisibilityDirective, 'solargraph/yard_map/directives/visibility_directive'
 
       # @param directive [YARD::Tags::Directive]
-      # @return [Class, nil]
+      # @return [Class<AttributeDirective>, Class<MethodDirective>, Class<DomainDirective>, Class<OverrideDirective>, Class<ParseDirective>, Class<VisibilityDirective>, nil]
       def self.for(directive)
         case directive.tag.tag_name
         when 'attribute'
