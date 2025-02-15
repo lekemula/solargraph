@@ -176,8 +176,6 @@ module Solargraph
         def extra_return_type docstring, context
           if docstring.has_tag?(:return_single_parameter) #&& context.subtypes.one?
             return context.subtypes.first || ComplexType::UNDEFINED
-          elsif docstring.has_tag?(:return_value_parameter) && context.value_types.one?
-            return context.value_types.first
           end
           nil
         end
