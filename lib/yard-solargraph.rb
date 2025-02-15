@@ -19,8 +19,6 @@ YARD::Tags::Library.define_tag("Type", :type, :with_types_and_name)
 YARD::Tags::Library.define_tag("Yieldself", :yieldself, :with_types)
 # Define a @yieldpublic tag for documenting block domains
 YARD::Tags::Library.define_tag("Yieldpublic", :yieldpublic, :with_types)
-# Define a @return_single_parameter tag for returning e.g. Array parameters
-YARD::Tags::Library.define_tag('ReturnSingleParameter', :return_single_parameter)
 # Define a @param_tuple tag for e.g. Hash#[]= parameters
 YARD::Tags::Library.define_tag('ParamTuple', :param_tuple)
 # Define a @!domain directive for documenting DSLs
