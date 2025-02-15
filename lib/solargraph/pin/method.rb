@@ -188,27 +188,6 @@ module Solargraph
 
       private
 
-      def select_decl name, asgn
-        if name.start_with?('**')
-          :kwrestarg
-        elsif name.start_with?('*')
-          :restarg
-        elsif name.start_with?('&')
-          :blockarg
-        elsif name.end_with?(':') && asgn
-          :kwoptarg
-        elsif name.end_with?(':')
-          :kwarg
-        elsif asgn
-          :optarg
-        else
-          :arg
-        end
-      end
-
-      def clean_param name
-        name.gsub(/[*&:]/, '')
-      end
 
       # @param tag [YARD::Tags::OverloadTag]
       def param_type_from_name(tag, name)
