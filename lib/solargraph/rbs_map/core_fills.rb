@@ -20,16 +20,6 @@ module Solargraph
         Solargraph::Pin::Method.new(name: 'class', scope: :instance, closure: Solargraph::Pin::Namespace.new(name: 'Object'), comments: '@return [Class<self>]')
       ]
 
-      YIELDPARAMS = [
-        Override.from_comment('Object#tap', %(
-@return [self]
-@yieldparam [self]
-        )),
-        Override.from_comment('String#each_line', %(
-@yieldparam [String]
-        )),
-      ]
-
       CLASS_RETURN_TYPES = [
         Override.method_return('Class#new', 'self'),
         Override.method_return('Class.new', 'Class<BasicObject>'),
@@ -46,7 +36,7 @@ module Solargraph
       end
       ERRNOS = errnos
 
-      ALL = KEYWORDS + MISSING + YIELDPARAMS + CLASS_RETURN_TYPES + ERRNOS
+      ALL = KEYWORDS + MISSING + CLASS_RETURN_TYPES + ERRNOS
     end
   end
 end
