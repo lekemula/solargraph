@@ -30,20 +30,6 @@ module Solargraph
         )),
       ]
 
-      methods_with_yieldparam_subtypes = %w[
-        Array#each Array#map Array#map! Array#any? Array#all? Array#index
-        Array#keep_if Array#delete_if
-        Enumerable#each_entry Enumerable#map Enumerable#any? Enumerable#all?
-        Enumerable#select Enumerable#reject
-        Set#each
-      ]
-
-      YIELDPARAM_SINGLE_PARAMETERS = methods_with_yieldparam_subtypes.map do |path|
-        Override.from_comment(path, %(
-@yieldparam_single_parameter
-          ))
-      end
-
       CLASS_RETURN_TYPES = [
         Override.method_return('Class#new', 'self'),
         Override.method_return('Class.new', 'Class<BasicObject>'),
@@ -60,7 +46,7 @@ module Solargraph
       end
       ERRNOS = errnos
 
-      ALL = KEYWORDS + MISSING + YIELDPARAMS + YIELDPARAM_SINGLE_PARAMETERS + CLASS_RETURN_TYPES + ERRNOS
+      ALL = KEYWORDS + MISSING + YIELDPARAMS + CLASS_RETURN_TYPES + ERRNOS
     end
   end
 end

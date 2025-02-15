@@ -21,6 +21,7 @@ module Solargraph
       # @param parameters [Array<Pin::Parameter>]
       # @param node [Parser::AST::Node, RubyVM::AbstractSyntaxTree::Node]
       # @param attribute [Boolean]
+      # @param signatures [Array<Signature>]
       def initialize visibility: :public, explicit: true, parameters: [], node: nil, attribute: false, signatures: nil, anon_splat: false, **splat
         super(**splat)
         @visibility = visibility
@@ -186,8 +187,37 @@ module Solargraph
         @anon_splat
       end
 
+      # @param arguments_count [Integer]
+      # @return [Array<Pin::Parameter>]
+      def yield_parameters(arguments_count)
+        block_signatures = signatures.select(&:block?).map(&:block)
+        matching_signature = block_signatures.find do |signature|
+          signature.arguments_match?(arguments_count)
+        end
+
+        matching_signature&.parameters || yard_yield_parameters
+      end
+
       private
 
+      # @return [Array<Pin::Parameter]
+      def yard_yield_parameters
+        return [] unless docstring.has_tag?(:yieldparam)
+
+        docstring.tags(:yieldparam).map do |tag|
+          name = tag.name
+          decl = tag.name.nil? ? :arg : :kwarg
+          Pin::Parameter.new(
+            location: location,
+            closure: self,
+            comments: tag.text,
+            name: name,
+            decl: decl,
+            presence: location ? location.range : nil,
+            return_type: ComplexType.try_parse(*tag.types)
+          )
+        end
+      end
 
       # @param tag [YARD::Tags::OverloadTag]
       def param_type_from_name(tag, name)

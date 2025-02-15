@@ -57,7 +57,7 @@ module Solargraph
             # next p if overloads.empty?
             type = ComplexType::UNDEFINED
             overloads.each do |ol|
-              next unless arguments_match(arguments, ol)
+              next unless ol.arguments_match?(arguments.length, with_block?)
               # next if ol.parameters.last && ol.parameters.last.first.start_with?('&') && ol.parameters.last.last.nil? && !with_block?
               match = true
               arguments.each_with_index do |arg, idx|
@@ -180,19 +180,6 @@ module Solargraph
             return context.value_types.first
           end
           nil
-        end
-
-        # @param arguments [Array<Chain>]
-        # @param signature [Pin::Signature]
-        # @return [Boolean]
-        def arguments_match arguments, signature
-          parameters = signature.parameters
-          argcount = arguments.length
-          parcount = parameters.length
-          parcount -= 1 if !parameters.empty? && parameters.last.block?
-          return false if signature.block? && !with_block?
-          return false if argcount < parcount && !(argcount == parcount - 1 && parameters.last.restarg?)
-          true
         end
 
         # @param api_map [ApiMap]

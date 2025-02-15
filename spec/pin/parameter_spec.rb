@@ -270,9 +270,7 @@ describe Solargraph::Pin::Parameter do
     expect(pin.documentation).not_to include('The bar method')
   end
 
-  it "typifies from yieldparam_single_parameter" do
-    # This test depends on the fact that Array#each has a
-    # yieldparam_single_parameter tag.
+  it "typifies from RBS generic yield params" do
     source = Solargraph::Source.load_string(%(
       # @return [Array<String>]
       def list_strings; end
@@ -282,7 +280,7 @@ describe Solargraph::Pin::Parameter do
       def use_string str
         while x
           list = list_strings
-          list.each do |s|
+          list.each_with_index do |s, _index|
             use_string(s)
           end
         end
