@@ -114,10 +114,8 @@ describe Solargraph::YardMap do
 
   it 'loads macros from gems' do
     Solargraph::Cache.clear
-    # Assuming the parser gem exists because it's a Solargraph dependency
-    yard_map = Solargraph::YardMap.new(required: ['rspec'], with_dependencies: true)
-    api_map = Solargraph::ApiMap.new
-    expect(yard_map.macros.count).to be > 0
+    yard_map = Solargraph::YardMap.new(required: ['gem-with-yard-macros'], directory: './', with_dependencies: true)
+    expect(yard_map.macros.map(&:name)).to include(:my_attribute)
   end
 
   it 'returns nil for require paths without gems' do

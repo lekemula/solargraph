@@ -11,6 +11,7 @@ module Solargraph
       # @param spec [Gem::Specification]
       def initialize code_objects, spec = nil
         @code_objects = code_objects
+        @macro_code_objects = code_objects.select { |co| co.is_a?(YARD::CodeObjects::MacroObject) }
         @spec = spec
         @pins = []
         @namespace_pins = {}
@@ -59,6 +60,7 @@ module Solargraph
           end
         elsif code_object.is_a?(YARD::CodeObjects::MethodObject)
           closure = @namespace_pins[code_object.namespace.to_s]
+          macros = macros_for_method_object(code_object)
           if code_object.name == :initialize && code_object.scope == :instance
             # @todo Check the visibility of <Class>.new
             result.push ToMethod.make(code_object, 'new', :class, :public, closure, @spec)
@@ -71,6 +73,22 @@ module Solargraph
           result.push ToConstant.make(code_object, closure, @spec)
         end
         result
+      end
+
+      # @return [Array<YARD::CodeObjects::MacroObject>]
+      def attached_macros
+        @attached_macros ||= @macro_code_objects.select(&:attached?)
+      end
+
+      # @return [Hash{YARD::CodeObjects::MethodObject => YARD::CodeObjects::MacroObject}]
+      def attached_macros_by_method_object
+        @attached_macros_by_method_object ||= attached_macros.group_by(&:method_object)
+      end
+
+      # @param method_object [YARD::CodeObjects::MethodObject]
+      # @return [Array<YARD::CodeObjects::MacroObject>]
+      def macros_for_method_object(method_object)
+        attached_macros_by_method_object[method_object]
       end
     end
   end
