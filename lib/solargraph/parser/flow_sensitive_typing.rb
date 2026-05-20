@@ -9,11 +9,15 @@ module Solargraph
       # @param ivars [Array<Solargraph::Pin::InstanceVariable>]
       # @param enclosing_breakable_pin [Solargraph::Pin::Breakable, nil]
       # @param enclosing_compound_statement_pin [Solargraph::Pin::CompoundStatement, nil]
-      def initialize locals, ivars, enclosing_breakable_pin, enclosing_compound_statement_pin
+      # @param closure [Solargraph::Pin::Closure, nil] The closure (method,
+      #   block, etc.) the analyzed expression runs in. Used as the closure
+      #   for synthetic locals that narrow bare method/attr calls.
+      def initialize locals, ivars, enclosing_breakable_pin, enclosing_compound_statement_pin, closure = nil
         @locals = locals
         @ivars = ivars
         @enclosing_breakable_pin = enclosing_breakable_pin
         @enclosing_compound_statement_pin = enclosing_compound_statement_pin
+        @closure = closure
       end
 
       # @param and_node [Parser::AST::Node]
@@ -307,6 +311,50 @@ module Solargraph
         end
       end
 
+      # A bare method/attr call with no receiver and no arguments, e.g.
+      # the `node` in `if node` or `node.nil?`. These are the calls we can
+      # safely narrow: they take no arguments and (unlike calls with a
+      # receiver) sit at the head of their chain, so a synthetic local can
+      # shadow them via ApiMap#var_at_location.
+      #
+      # @param node [Parser::AST::Node, nil]
+      # @return [Boolean]
+      def bare_method_call? node
+        node&.type == :send && node.children[0].nil? &&
+          node.children[1].is_a?(Symbol) && node.children.length == 2
+      end
+
+      # @return [Pin::Closure, nil]
+      def synthetic_closure
+        closure || enclosing_compound_statement_pin&.closure || locals.first&.closure || ivars.first&.closure
+      end
+
+      # Build a synthetic local variable for a bare method/attr call so the
+      # existing downcast machinery can narrow its result. The call node is
+      # used as the variable's assignment, so its type is resolved lazily
+      # from the method at typecheck time. Because the assignment node sits
+      # outside the narrowed presence range, resolving it does not re-find
+      # the synthetic pin and recurse.
+      #
+      # @param variable_name [String]
+      # @param value_node [Parser::AST::Node]
+      # @return [Pin::LocalVariable, nil]
+      def synthesize_var_pin variable_name, value_node
+        closure = synthetic_closure
+        return nil if closure.nil?
+
+        location = Solargraph::Location.from_node(value_node)
+        return nil if location.nil?
+
+        Pin::LocalVariable.new(
+          name: variable_name,
+          closure: closure,
+          location: location,
+          assignment: value_node,
+          source: :flow_sensitive_typing
+        )
+      end
+
       # @param isa_node [Parser::AST::Node]
       # @param true_presences [Array<Range>]
       # @param false_presences [Array<Range>]
@@ -318,7 +366,9 @@ module Solargraph
         # @sg-ignore Need to add nil check here
         isa_position = Range.from_node(isa_node).start
 
+        receiver_node = isa_node.children[0]
         pin = find_var(variable_name, isa_position)
+        pin ||= synthesize_var_pin(variable_name, receiver_node) if bare_method_call?(receiver_node)
         return unless pin
 
         # @type Hash{Pin::BaseVariable => Array<Hash{Symbol => ComplexType}>}
@@ -355,7 +405,9 @@ module Solargraph
         # @sg-ignore Need to add nil check here
         nilp_position = Range.from_node(nilp_node).start
 
+        receiver_node = nilp_node.children[0]
         pin = find_var(variable_name, nilp_position)
+        pin ||= synthesize_var_pin(variable_name, receiver_node) if bare_method_call?(receiver_node)
         return unless pin
 
         # @type Hash{Pin::LocalVariable => Array<Hash{Symbol => ComplexType}>}
@@ -409,15 +461,18 @@ module Solargraph
       # @param true_presences [Array<Range>]
       # @param false_presences [Array<Range>]
       def process_variable node, true_presences, false_presences
-        return unless %i[lvar ivar cvar gvar].include?(node.type)
-
-        variable_name = parse_variable(node)
+        if %i[lvar ivar cvar gvar].include?(node.type)
+          variable_name = parse_variable(node)
+        elsif bare_method_call?(node)
+          variable_name = node.children[1].to_s
+        end
         return if variable_name.nil?
 
         # @sg-ignore Need to add nil check here
         var_position = Range.from_node(node).start
 
         pin = find_var(variable_name, var_position)
+        pin ||= synthesize_var_pin(variable_name, node) if bare_method_call?(node)
         return unless pin
 
         # @type Hash{Pin::LocalVariable => Array<Hash{Symbol => ComplexType}>}
@@ -465,7 +520,7 @@ module Solargraph
         %i[return raise next redo retry].include?(clause_node&.type)
       end
 
-      attr_reader :locals, :ivars, :enclosing_breakable_pin, :enclosing_compound_statement_pin
+      attr_reader :locals, :ivars, :enclosing_breakable_pin, :enclosing_compound_statement_pin, :closure
     end
   end
 end

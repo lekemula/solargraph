@@ -1024,4 +1024,304 @@ describe Solargraph::Parser::FlowSensitiveTyping do
     clip = api_map.clip_at('test.rb', [13, 12])
     expect(clip.infer.to_s).to eq('ReproBase')
   end
+
+  it 'uses a bare attr reader in a simple if() to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @return [void]
+        def go
+          node
+          if node
+            node
+          else
+            node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [6, 10])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [8, 12])
+    expect(clip.infer.rooted_tags).to eq('::String')
+
+    clip = api_map.clip_at('test.rb', [10, 12])
+    expect(clip.infer.rooted_tags).to eq('nil, false')
+  end
+
+  it 'uses .nil? on a bare attr reader in a return if() to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @return [void]
+        def go
+          node
+          return if node.nil?
+          node
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [6, 10])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [8, 10])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses is_a? on a bare attr reader in a simple if() to refine types' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @return [void]
+        def go
+          node
+          if node.is_a?(String)
+            node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [6, 10])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [8, 12])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses ! and .nil? on a bare attr reader in a simple if() to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @return [void]
+        def go
+          node
+          if !node.nil?
+            node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [6, 10])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [8, 12])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses && on a bare attr reader in a simple if() to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @param flag [Boolean]
+        # @return [void]
+        def go(flag)
+          node
+          if node && flag
+            node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [7, 10])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [9, 12])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses .nil? on a bare attr reader in an unless block to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @return [void]
+        def go
+          node
+          unless node.nil?
+            node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [6, 10])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [8, 12])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses a bare attr reader in an unless/else to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @return [void]
+        def go
+          node
+          unless node
+            node
+          else
+            node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [6, 10])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [8, 12])
+    expect(clip.infer.rooted_tags).to eq('nil, false')
+
+    clip = api_map.clip_at('test.rb', [10, 12])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses a bare attr reader in a while loop to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @return [void]
+        def go
+          node
+          while node
+            node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [6, 10])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [8, 12])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses ! and .nil? on a bare attr reader in a while loop to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @return [void]
+        def go
+          node
+          while !node.nil?
+            node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [6, 10])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [8, 12])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses .nil? in a next if() inside a block to refine a bare attr reader' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @return [String, nil]
+        attr_reader :node
+        # @param items [Array<Integer>]
+        # @return [void]
+        def go(items)
+          items.each do |item|
+            node
+            next if node.nil?
+            node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [8, 12])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    clip = api_map.clip_at('test.rb', [10, 12])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses a method call on a receiver in a simple if() to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Arg
+        # @return [String, nil]
+        attr_reader :node
+      end
+      class Foo
+        # @param args [Array<Arg>]
+        # @return [void]
+        def go(args)
+          args.each do |arg|
+            arg.node
+            if arg.node
+              arg.node
+            end
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [10, 16])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    pending('flow sensitive typing needs to handle attrs on a receiver')
+
+    clip = api_map.clip_at('test.rb', [12, 18])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
+
+  it 'uses a method call on a variable receiver in a simple if() to refine nilness' do
+    source = Solargraph::Source.load_string(%(
+      class Arg
+        # @return [String, nil]
+        attr_reader :node
+      end
+      class Foo
+        # @param variable [Arg]
+        # @return [void]
+        def go(variable)
+          variable.node
+          if variable.node
+            variable.node
+          end
+        end
+      end
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new.map(source)
+
+    clip = api_map.clip_at('test.rb', [9, 19])
+    expect(clip.infer.rooted_tags).to eq('::String, nil')
+
+    pending('flow sensitive typing needs to handle attrs on a receiver')
+
+    clip = api_map.clip_at('test.rb', [11, 21])
+    expect(clip.infer.rooted_tags).to eq('::String')
+  end
 end
