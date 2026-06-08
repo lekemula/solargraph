@@ -9,6 +9,8 @@ module Solargraph
     autoload :Severities,      'solargraph/diagnostics/severities'
     autoload :Rubocop,         'solargraph/diagnostics/rubocop'
     autoload :RubocopHelpers,  'solargraph/diagnostics/rubocop_helpers'
+    autoload :YardLint,        'solargraph/diagnostics/yard_lint'
+    autoload :YardLintHelpers, 'solargraph/diagnostics/yard_lint_helpers'
     autoload :RequireNotFound, 'solargraph/diagnostics/require_not_found'
     autoload :UpdateErrors,    'solargraph/diagnostics/update_errors'
     autoload :TypeCheck,       'solargraph/diagnostics/type_check'
@@ -47,6 +49,7 @@ module Solargraph
     end
 
     register 'rubocop', Rubocop
+    register 'yard_lint', YardLint
     register 'require_not_found', RequireNotFound
     register 'typecheck', TypeCheck
     register 'update_errors', UpdateErrors
