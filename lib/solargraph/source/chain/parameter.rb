@@ -61,6 +61,8 @@ module Solargraph
         # @param name [String, nil]
         # @return [Boolean] true if the literal is passed as the named parameter
         def at_parameter? parameters, name
+          return at_keyword?(parameters, name) if current_index.nil?
+
           parameters.each_with_index do |param, param_index|
             next unless param.name == name
 
@@ -68,6 +70,53 @@ module Solargraph
             return param.restarg? ? current_index >= param_index : current_index == param_index
           end
           false
+        end
+
+        # @param parameters [::Array<Pin::Parameter>]
+        # @param name [String, nil]
+        # @return [Boolean] true if the literal is the value of a keyword passed as the named parameter
+        def at_keyword? parameters, name
+          key = keyword
+          return false if key.nil?
+
+          parameters.each_with_index do |param, param_index|
+            next unless param.name == name
+            return key == param.name.to_sym if param.keyword?
+            # a key naming a keyword parameter goes to that parameter instead
+            return parameters.none? { |other| other.keyword? && key == other.name.to_sym } if param.kwrestarg?
+            # without keyword parameters, the hash is an ordinary positional argument
+            return false if parameters.any? { |other| other.keyword? || other.kwrestarg? }
+
+            return param.restarg? ? hash_index >= param_index : hash_index == param_index
+          end
+          false
+        end
+
+        # @return [Integer] The index of the last argument, the one keyword arguments are passed in
+        # @sg-ignore Need to add nil check here
+        def hash_index
+          method_call_chain.node.children.length - 3
+        end
+
+        # The key of the hash pair whose value is the literal: `:to` in
+        # `get 'latest', to: 'posts#show'`, or `'up'` in `get 'up' => 'health#show'`.
+        #
+        # @return [::Symbol, ::String, nil]
+        def keyword
+          return @keyword if defined?(@keyword)
+
+          @keyword = nil
+          last_argument = method_call_chain.node.children.last
+          # @sg-ignore flow sensitive typing should handle is_a? and next
+          return @keyword unless last_argument.is_a?(::Parser::AST::Node) && last_argument.type == :hash
+
+          # @type [::Array<::Parser::AST::Node>]
+          # @sg-ignore flow sensitive typing should handle is_a? and next
+          pairs = last_argument.children
+          pair = pairs.find { |child| child.type == :pair && child.children[1].equal?(literal.node) }
+          # @type [::Parser::AST::Node, nil]
+          key = pair&.children&.first
+          @keyword = (key.children.first if key && %i[sym str].include?(key.type))
         end
 
         # @return [String] The name of the method that this parameter belongs to
