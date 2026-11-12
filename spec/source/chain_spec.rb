@@ -341,6 +341,59 @@ describe Solargraph::Source::Chain do
     Solargraph::Convention.unregister dummy_convention
   end
 
+  context 'with factory parameters passed as keywords' do
+    # @param call [String] a call to Routes.get
+    # @param column [Integer] where the literal is in the call
+    # @param param_name [String]
+    # @param parameters [String] the parameters of Routes.get
+    # @return [Array<Solargraph::Pin::Base>]
+    def define_literal call, column, param_name, parameters: 'path = nil, to: nil, **mapping'
+      factory_parameter = Solargraph::Pin::FactoryParameter.new(
+        method_name: 'get',
+        method_namespace: 'Routes',
+        method_scope: :class,
+        param_name: param_name,
+        value: 'posts#show',
+        return_type: nil,
+        location: Solargraph::Location.new('test.rb', Solargraph::Range.from_to(0, 6, 0, 18))
+      )
+      source = Solargraph::Source.load_string(%(module Routes
+  def self.get(#{parameters}); end
+end
+#{call}
+), 'test.rb')
+      api_map = Solargraph::ApiMap.new
+      api_map.index Solargraph::SourceMap.map(source).pins + [factory_parameter]
+      chain = Solargraph::Source::SourceChainer.chain(source, Solargraph::Position.new(3, column))
+      chain.define(api_map, Solargraph::Pin::ROOT_PIN, [])
+    end
+
+    it 'defines a literal passed to a keyword parameter' do
+      pins = define_literal("Routes.get('latest', to: 'posts#show')", 27, 'to')
+      expect(pins.map(&:value)).to eq(['posts#show'])
+    end
+
+    it 'defines a literal passed to a keyword rest parameter' do
+      pins = define_literal("Routes.get('latest' => 'posts#show')", 25, 'mapping')
+      expect(pins.map(&:value)).to eq(['posts#show'])
+    end
+
+    it 'does not pass a named keyword to the keyword rest parameter' do
+      pins = define_literal("Routes.get('latest', to: 'posts#show')", 27, 'mapping')
+      expect(pins).to be_empty
+    end
+
+    it 'defines a literal in a hash passed to a positional parameter' do
+      pins = define_literal("Routes.get('latest' => 'posts#show')", 25, 'options', parameters: 'options')
+      expect(pins.map(&:value)).to eq(['posts#show'])
+    end
+
+    it 'does not pass a keyword to a positional parameter' do
+      pins = define_literal("Routes.get(to: 'posts#show')", 17, 'path')
+      expect(pins).to be_empty
+    end
+  end
+
   it "follows constant chains" do
     source = Solargraph::Source.load_string(%(
       module Mixin; end
