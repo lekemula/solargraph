@@ -29,14 +29,17 @@ module Solargraph
           method_pin = method_call_chain.define(api_map, name_pin, locals)&.first
           return [] unless method_pin
 
+          # a pin whose signatures do not match the arguments has no parameters of its own
+          parameter_lists = if method_pin.parameters.empty?
+                              method_pin.signatures.map(&:parameters)
+                            else
+                              [method_pin.parameters]
+                            end
           # Use indexed lookup for better performance
           api_map.factory_parameters_for_method(method_pin).select do |fp|
-            param_index = method_pin.parameters.find_index { |param| param.name == fp.param_name }
-            next if param_index.nil?
             next false unless fp.value == literal_value
 
-            # a splat takes every argument from its position on
-            method_pin.parameters[param_index].restarg? ? current_index >= param_index : current_index == param_index
+            parameter_lists.any? { |parameters| at_parameter?(parameters, fp.param_name) }
           end
         end
 
@@ -51,6 +54,19 @@ module Solargraph
         attr_reader :literal
         # @ return [Chain]
         attr_reader :method_call_chain
+
+        # @param parameters [::Array<Pin::Parameter>]
+        # @param name [String, nil]
+        # @return [Boolean] true if the literal is passed as the named parameter
+        def at_parameter? parameters, name
+          parameters.each_with_index do |param, param_index|
+            next unless param.name == name
+
+            # a splat takes every argument from its position on
+            return param.restarg? ? current_index >= param_index : current_index == param_index
+          end
+          false
+        end
 
         # @return [String] The name of the method that this parameter belongs to
         def method_name
