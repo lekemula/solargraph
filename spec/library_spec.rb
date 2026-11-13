@@ -824,5 +824,46 @@ describe Solargraph::Library do
       RUBY_CODE
       expect(starts).to eq([[5, 2]])
     end
+
+    context 'with a pin that stands for several definitions' do
+      let(:convention) do
+        Class.new(Solargraph::Convention::Base) do
+          def local source_map
+            return Solargraph::Environ.new unless source_map.filename == 'test.rb'
+
+            origin = Class.new(Solargraph::Pin::InstanceVariable) do
+              def definition_locations
+                [[9, 0], [3, 2], [9, 0]].map do |line, column|
+                  Solargraph::Location.new('other.rb', Solargraph::Range.from_to(line, column, line, column + 6))
+                end
+              end
+            end
+            show = Solargraph::Pin::Method.new(name: 'show', closure: Solargraph::Pin::Namespace.new(name: 'Foo'),
+                                               scope: :instance, source: :spec)
+            Solargraph::Environ.new(pins: [
+                                      origin.new(name: '@origin', closure: show, source: :spec,
+                                                 location: Solargraph::Location.new('test.rb', Solargraph::Range.from_to(0, 0, 0, 3)),
+                                                 return_type: Solargraph::ComplexType.parse('String'))
+                                    ])
+          end
+        end
+      end
+
+      before { Solargraph::Convention.register convention }
+
+      after { Solargraph::Convention.unregister convention }
+
+      it 'lists each of its locations' do
+        library.attach Solargraph::Source.load_string(<<~RUBY_CODE, 'test.rb')
+          class Foo
+            def show
+              @origin
+            end
+          end
+        RUBY_CODE
+        locations = library.definitions_at('test.rb', 2, 4).map(&:location)
+        expect(locations.map { |loc| [loc.filename, loc.range.start.line] }).to eq([['other.rb', 3], ['other.rb', 9]])
+      end
+    end
   end
 end
