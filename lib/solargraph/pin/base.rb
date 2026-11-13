@@ -653,8 +653,18 @@ module Solargraph
         result
       end
 
+      # The source locations this pin stands for in go-to-definition.
+      #
+      # A pin that merges several definitions, such as a variable assigned
+      # in more than one place, can override this to list each of them.
+      #
+      # @return [::Array<Location>]
+      def definition_locations
+        [location].compact
+      end
+
       # Return a copy of this pin at another location, for go-to-definition
-      # to list each definition of a variable as its own pin.
+      # to list each of #definition_locations as its own pin.
       #
       # @param location [Location]
       # @return [self]
