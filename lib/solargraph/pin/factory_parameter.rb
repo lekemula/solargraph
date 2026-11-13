@@ -62,6 +62,15 @@ module Solargraph
         param_name
       end
 
+      # Whether a literal passed in a closure can name this parameter, e.g. a name relative to the caller's
+      # directory.
+      #
+      # @param _closure [Pin::Base] the closure of the call
+      # @return [Boolean]
+      def visible_from? _closure
+        true
+      end
+
       def text_documentation
         "#{method_path}(#{param_name}) = #{value.inspect}"
       end

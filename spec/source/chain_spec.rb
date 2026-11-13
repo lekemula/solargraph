@@ -394,6 +394,37 @@ end
     end
   end
 
+  it 'defines only the factory parameters visible from the closure of the call' do
+    # a factory parameter visible from the methods of one class
+    scoped = Class.new(Solargraph::Pin::FactoryParameter) do
+      define_method(:visible_from?) { |closure| closure.namespace == location.filename.delete_suffix('.rb') }
+    end
+    targets = %w[Posts Comments].map do |namespace|
+      scoped.new(
+        method_name: 'render', method_namespace: 'Renderer', method_scope: :instance, param_name: 'name',
+        value: 'summary', return_type: nil,
+        location: Solargraph::Location.new("#{namespace}.rb", Solargraph::Range.from_to(0, 0, 0, 0))
+      )
+    end
+    source = Solargraph::Source.load_string(%(module Renderer
+  def render(name); end
+end
+class Posts
+  include Renderer
+  def show
+    render('summary')
+  end
+end
+), 'test.rb')
+    source_map = Solargraph::SourceMap.map(source)
+    api_map = Solargraph::ApiMap.new
+    api_map.index source_map.pins + targets
+    chain = Solargraph::Source::SourceChainer.chain(source, Solargraph::Position.new(6, 14))
+    closure = source_map.locate_named_path_pin(6, 14)
+
+    expect(chain.define(api_map, closure, []).map { |pin| pin.location.filename }).to eq(['Posts.rb'])
+  end
+
   it "follows constant chains" do
     source = Solargraph::Source.load_string(%(
       module Mixin; end
