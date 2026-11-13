@@ -108,6 +108,34 @@ describe Solargraph::Convention do
     described_class.unregister updated_dummy_convention
   end
 
+  it 'resolves the pins of a file added to the workspace after cataloging' do
+    # a method named after each file
+    file_convention = Class.new(Solargraph::Convention::Base) do
+      def local source_map
+        Solargraph::Environ.new(
+          pins: [
+            Solargraph::Pin::Method.new(
+              name: File.basename(source_map.filename, '.rb'),
+              closure: Solargraph::Pin::Namespace.new(name: 'Files'),
+              scope: :instance,
+              location: Solargraph::Location.new(source_map.filename, Solargraph::Range.from_to(0, 0, 0, 0))
+            )
+          ]
+        )
+      end
+    end
+    described_class.register file_convention
+    first, second = %w[first.rb second.rb].map { |name| Solargraph::SourceMap.load_string('', name) }
+    api_map = Solargraph::ApiMap.new
+    api_map.catalog Solargraph::Bench.new(source_maps: [first])
+
+    api_map.catalog Solargraph::Bench.new(source_maps: [first, second])
+
+    expect(api_map.get_path_pins('Files#second')).not_to be_empty
+  ensure
+    described_class.unregister file_convention
+  end
+
   describe 'source transformation' do
     # Lines starting with "> " are Ruby; every other line is prose. The
     # transform keeps line count and line lengths so positions map 1:1.
