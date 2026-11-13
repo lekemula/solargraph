@@ -784,4 +784,78 @@ describe Solargraph::Library do
       expect(library.cache_progress).to be_nil
     end
   end
+
+  describe '#definitions_at on a variable' do
+    let(:library) { described_class.new }
+
+    # @param code [String]
+    # @param line [Integer]
+    # @param column [Integer]
+    # @return [Array<Array(Integer, Integer)>] the start line and column of each definition
+    def definition_starts code, line, column
+      library.attach Solargraph::Source.load_string(code, 'test.rb')
+      library.definitions_at('test.rb', line, column).map { |pin| [pin.location.range.start.line, pin.location.range.start.character] }
+    end
+
+    it 'lists every assignment of an instance variable in the class, by file and line' do
+      starts = definition_starts(<<~RUBY_CODE, 14, 4)
+        class Foo
+          def create
+            @post = 1
+          end
+
+          def set_post
+            @post = 2
+          end
+
+          def new
+            @post = 3
+          end
+
+          def show
+            @post
+          end
+        end
+      RUBY_CODE
+      expect(starts).to eq([[2, 4], [6, 4], [10, 4]])
+    end
+
+    it 'lists a local assigned in both branches of an if' do
+      starts = definition_starts(<<~RUBY_CODE, 6, 2)
+        def foo
+          if rand
+            x = 1
+          else
+            x = 'one'
+          end
+          x
+        end
+      RUBY_CODE
+      expect(starts).to eq([[2, 4], [4, 4]])
+    end
+
+    it 'jumps straight to a single assignment' do
+      starts = definition_starts(<<~RUBY_CODE, 2, 2)
+        def foo
+          x = 1
+          x
+        end
+      RUBY_CODE
+      expect(starts).to eq([[1, 2]])
+    end
+
+    it 'leaves out an assignment not visible at the cursor' do
+      starts = definition_starts(<<~RUBY_CODE, 6, 2)
+        def foo
+          x = 1
+        end
+
+        def bar
+          x = 2
+          x
+        end
+      RUBY_CODE
+      expect(starts).to eq([[5, 2]])
+    end
+  end
 end
