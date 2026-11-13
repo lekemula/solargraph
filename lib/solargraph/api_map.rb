@@ -400,7 +400,9 @@ module Solargraph
     #
     # Where #var_at_location returns the visible candidates merged into
     # one pin, this returns that merged pin once per definition location,
-    # so each definition still carries the merged type.
+    # so each definition still carries the merged type. A candidate that
+    # stands for several definitions contributes each of its
+    # Pin::Base#definition_locations.
     #
     # @param candidates [Array<Pin::BaseVariable>]
     # @param name [String]
@@ -416,7 +418,7 @@ module Solargraph
       merged = visible.inject(&:combine_with)
       return [] unless merged
 
-      visible.filter_map(&:location)
+      visible.flat_map(&:definition_locations)
              .uniq
              .sort_by { |loc| [loc.filename.to_s, loc.range.start.line, loc.range.start.character] }
              .map { |loc| merged.at_location(loc) }
