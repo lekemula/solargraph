@@ -653,6 +653,20 @@ module Solargraph
         result
       end
 
+      # Return a copy of this pin at another location, for go-to-definition
+      # to list each definition of a variable as its own pin.
+      #
+      # @param location [Location]
+      # @return [self]
+      def at_location location
+        return self if location == self.location
+
+        result = dup
+        result.location = location
+        result.instance_variable_set(:@identity, nil)
+        result
+      end
+
       # @deprecated
       # @return [String]
       def identity
@@ -739,6 +753,9 @@ module Solargraph
       attr_writer :return_type
 
       attr_writer :docstring, :directives
+
+      # @return [Location, nil]
+      attr_writer :location
 
       private
 
