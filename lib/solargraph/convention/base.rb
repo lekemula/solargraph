@@ -45,6 +45,22 @@ module Solargraph
         nil
       end
 
+      # The closure the top level of a transformed source runs in, e.g. a
+      # method of a synthetic class that renders a template. Its parameters
+      # become local variables at the top level.
+      # Subclasses can override this method.
+      #
+      # The closure must have the source's location and node
+      # (`location: source.location, node: source.node`) so Solargraph can
+      # locate it at any position in the file.
+      #
+      # @param source [Source] a source transformed by a convention
+      # @return [Pin::Closure, nil] The closure, or nil to run the source at
+      #   the top level
+      def source_closure source
+        nil
+      end
+
       # Provides any additional method pins based on e the described object.
       #
       # @param api_map [ApiMap]

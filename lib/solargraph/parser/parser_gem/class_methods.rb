@@ -42,8 +42,11 @@ module Solargraph
         # @param source [Source]
         # @return [Array(Array<Pin::Base>, Array<Pin::LocalVariable>)]
         def map source
+          closure = Convention.source_closure(source)
+          seed = closure ? [Pin::Namespace.new(location: source.location, name: '', source: :parser), closure] : []
           # @sg-ignore Need to add nil check here
-          pins, locals, ivars = NodeProcessor.process(source.node, Region.new(source: source))
+          pins, locals, ivars = NodeProcessor.process(source.node, Region.new(source: source, closure: closure), seed)
+          locals.concat closure.parameters if closure.is_a?(Pin::Callable)
           pins.concat(ivars)
           [pins, locals]
         end
