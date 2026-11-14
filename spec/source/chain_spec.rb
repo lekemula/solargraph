@@ -210,10 +210,16 @@ describe Solargraph::Source::Chain do
   end
 
   it 'defines factory parameters when no signature matches the arguments' do
+    # The pins below stand for:
+    #
+    #   module Routes
+    #     # @param controller [Integer] e.g. an RBS type alias the literal does not conform to
+    #     # @return [void]
+    #     def self.controller(controller); end
+    #   end
     dummy_convention = Class.new(Solargraph::Convention::Base) do
       def local _source_map
         namespace = Solargraph::Pin::Namespace.new(name: 'Routes', type: :module)
-        # e.g. an RBS type alias the literal does not conform to
         method = Solargraph::Pin::Method.new(name: 'controller', closure: namespace, scope: :class)
         signature = Solargraph::Pin::Signature.new(closure: method, parameters: [],
                                                    return_type: Solargraph::ComplexType::VOID)
@@ -254,6 +260,19 @@ describe Solargraph::Source::Chain do
   end
 
   it 'defines factory parameters only of the signature that matches the arguments' do
+    # The pins below stand for:
+    #
+    #   module Routes
+    #     # @overload find(kind, extra)
+    #     #   @param kind [Symbol]
+    #     #   @param extra [Symbol]
+    #     #   @return [void]
+    #     # @overload find(id, name)
+    #     #   @param id [Integer]
+    #     #   @param name [Symbol]
+    #     #   @return [void]
+    #     def self.find(*args); end
+    #   end
     dummy_convention = Class.new(Solargraph::Convention::Base) do
       def local _source_map
         namespace = Solargraph::Pin::Namespace.new(name: 'Routes', type: :module)
