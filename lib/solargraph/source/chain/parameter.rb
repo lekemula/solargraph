@@ -37,7 +37,7 @@ module Solargraph
                             end
           # Use indexed lookup for better performance
           matches = api_map.factory_parameters_for_method(method_pin).select do |fp|
-            next false unless fp.value == literal_value
+            next false unless fp.value == literal_value && fp.visible_from?(name_pin)
 
             parameter_lists.any? { |parameters| at_parameter?(parameters, fp.param_name) }
           end
