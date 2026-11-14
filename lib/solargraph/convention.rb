@@ -51,6 +51,21 @@ module Solargraph
       nil
     end
 
+    # The closure the top level of a transformed source runs in, from the
+    # first convention that provides one.
+    #
+    # @param source [Source]
+    # @return [Pin::Closure, nil] The closure, or nil for untransformed
+    #   sources and sources no convention binds
+    def self.source_closure source
+      return nil unless source.transformed?
+      @@conventions.each do |conv|
+        result = conv.source_closure(source)
+        return result if result
+      end
+      nil
+    end
+
     # @todo Determine what argument needs to be passed here
     #
     # @param object [Object]

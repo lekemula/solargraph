@@ -225,4 +225,105 @@ describe Solargraph::Convention do
       described_class.unregister greedy_convention
     end
   end
+
+  describe 'source closure' do
+    # Binds the top level of every .fake source to Widget#__render, with one
+    # parameter declared by the "@param size" line of the file.
+    let(:closure_convention) do
+      Class.new(Solargraph::Convention::Base) do
+        def transform_source filename, code
+          return unless filename.end_with?('.fake')
+          code.gsub(/^(?:> |(.))/) { Regexp.last_match(1) ? '#' : '  ' }
+        end
+
+        def source_closure source
+          render = Solargraph::Pin::Method.new(
+            name: '__render',
+            closure: Solargraph::Pin::Namespace.new(name: 'Widget'),
+            scope: :instance,
+            location: source.location,
+            node: source.node,
+            source: :fake
+          )
+          line = source.original_code.lines.index { |l| l.start_with?('@param size') }
+          render.parameters << Solargraph::Pin::Parameter.new(
+            name: 'size',
+            decl: :kwarg,
+            closure: render,
+            location: Solargraph::Location.new(source.filename, Solargraph::Range.from_to(line, 7, line, 11)),
+            return_type: Solargraph::ComplexType.parse('Integer'),
+            source: :fake
+          )
+          render
+        end
+      end
+    end
+
+    let(:widget) do
+      Solargraph::Source.load_string(<<~RUBY, 'widget.rb')
+        class Widget
+          # @return [String]
+          def label; end
+
+          def initialize
+            @color = 'red'
+          end
+        end
+      RUBY
+    end
+
+    let(:view) do
+      Solargraph::Source.load_string(<<~FAKE, 'view.fake')
+        @param size
+        > self
+        > label
+        > size
+        > @color
+      FAKE
+    end
+
+    let(:api_map) do
+      Solargraph::ApiMap.new.tap do |map|
+        map.catalog Solargraph::Bench.new(source_maps: [widget, view].map { |s| Solargraph::SourceMap.map(s) })
+      end
+    end
+
+    before { described_class.register closure_convention }
+
+    after { described_class.unregister closure_convention }
+
+    it 'runs the top level of the source in the closure' do
+      expect(api_map.clip_at('view.fake', [1, 3]).infer.to_s).to eq('Widget')
+    end
+
+    it 'resolves methods of the closure class at the top level' do
+      expect(api_map.clip_at('view.fake', [2, 3]).infer.to_s).to eq('String')
+    end
+
+    it 'resolves closure parameters as locals' do
+      expect(api_map.clip_at('view.fake', [3, 3]).infer.to_s).to eq('Integer')
+    end
+
+    it 'finds the definition of a closure parameter' do
+      locations = api_map.clip_at('view.fake', [3, 3]).define.map(&:location)
+      expect(locations.map { |loc| [loc.filename, loc.range.start.line] }).to eq([['view.fake', 0]])
+    end
+
+    it 'resolves instance variables of the closure class' do
+      expect(api_map.clip_at('view.fake', [4, 3]).infer.to_s).to eq('String')
+    end
+
+    it 'locates the closure at the top level' do
+      source_map = Solargraph::SourceMap.map(view)
+      expect(source_map.locate_closure_pin(2, 3).path).to eq('Widget#__render')
+      expect(source_map.locate_pins(view.location).map(&:path)).to include('Widget#__render')
+    end
+
+    it 'leaves untransformed sources at the top level' do
+      source = Solargraph::Source.load_string("self\n", 'plain.rb')
+      map = Solargraph::ApiMap.new
+      map.map source
+      expect(map.clip_at('plain.rb', [0, 1]).infer.to_s).to eq('Class')
+    end
+  end
 end
