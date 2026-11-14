@@ -55,6 +55,10 @@ module Solargraph
         # @ return [Chain]
         attr_reader :method_call_chain
 
+        # @example With `def get(path, *names)`
+        #   get 'latest'          # 'latest' is at `path`
+        #   get 'a', 'b', 'c'     # 'b' and 'c' are at `names`
+        #
         # @param parameters [::Array<Pin::Parameter>]
         # @param name [String, nil]
         # @return [Boolean] true if the literal is passed as the named parameter
@@ -70,6 +74,12 @@ module Solargraph
           false
         end
 
+        # @example With `def get(path = nil, to: nil, **mapping)`
+        #   get 'latest', to: 'posts#show'   # 'posts#show' is at `to`
+        #   get 'latest' => 'posts#show'     # 'posts#show' is at `mapping`
+        # @example With `def get(options)`
+        #   get 'latest' => 'posts#show'     # 'posts#show' is at `options`, a positional hash
+        #
         # @param parameters [::Array<Pin::Parameter>]
         # @param name [String, nil]
         # @return [Boolean] true if the literal is the value of a keyword passed as the named parameter
