@@ -146,6 +146,22 @@ module Solargraph
         links.last.resolve(api_map, working_pin, locals)
       end
 
+      # A copy of a chain, link or node for the inference cache with Parser
+      # nodes replaced by their filename and range, so a cache entry does not
+      # keep an evicted file's syntax tree alive.
+      #
+      # @param value [Object]
+      # @return [Object]
+      def self.cache_key_for value
+        case value
+        when ::Parser::AST::Node, NodeRef then NodeRef.key(value)
+        when Chain, Link then cache_key_for(value.send(:equality_fields))
+        # @sg-ignore flow sensitive typing needs to handle case/when
+        when ::Array then value.map { |item| cache_key_for(item) }
+        else value
+        end
+      end
+
       # @param api_map [ApiMap]
       # @param name_pin [Pin::Base] The pin for the closure in which this code runs
       # @param locals [::Array<Pin::LocalVariable>]
@@ -153,7 +169,7 @@ module Solargraph
       # @sg-ignore
       def infer api_map, name_pin, locals
         # includes binder as it is mutable in Pin::Block
-        cache_key = [node, node&.location, links, name_pin&.return_type, name_pin&.binder, locals]
+        cache_key = [Chain.cache_key_for(self), name_pin&.return_type, name_pin&.binder, locals]
         if @@inference_invalidation_key == api_map.hash
           cached = @@inference_cache[cache_key]
           return cached if cached
