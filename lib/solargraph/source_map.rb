@@ -250,7 +250,7 @@ module Solargraph
     end
 
     # @sg-ignore flow sensitive typing needs to handle && in modifiers
-    # @param macro_method_names [Set<String>]
+    # @param macro_method_names [Enumerable<String>]
     # @return [Array<Parser::AST::Node>]
     def macro_method_candidates macro_method_names
       cached = @macro_method_candidates

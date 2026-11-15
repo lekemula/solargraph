@@ -140,25 +140,13 @@ module Solargraph
     # @return [Array<Pin::Base>]
     def process_macros
       macro_pins = []
+      names = store.macro_method_names
       Solargraph.logger.debug { "ApiMap#process_macros: processing macros for #{source_maps.size} source maps" }
       Solargraph.logger.debug { "ApiMap#process_macros: store has #{store.macro_method_name_pins.size} macro method name pins" }
       Solargraph.logger.debug { "ApiMap#process_macros: named macros: #{store.named_macros.keys.join(', ')}" }
       source_maps.each do |source_map|
-        method_candidates = source_map.macro_method_candidates(store.macro_method_names)
-        Solargraph.logger.debug { "ApiMap#process_macros: processing source map for #{source_map.filename} with #{method_candidates.size} macro method candidates" }
-        method_candidates.each do |node|
-          closure = source_map.locate_closure_pin(node.location.line, node.location.column)
-          chain = Solargraph::Parser::ParserGem::NodeChainer.chain(node)
-          next unless node.children[0].nil? && store.macro_method_name_pins.key?(node.children[1].to_s)
-          match = store.macro_method_name_pins[node.children[1].to_s].find do |pin|
-            get_complex_type_methods(closure.return_type).include?(pin)
-          end
-          next unless match
-          match.macros.each do |macro|
-            macro_pins.concat macro.generate_pins_from(chain, match, source_map)
-          end
-          next
-        end
+        next unless source_map.calls_any?(names)
+        source_map.scan_source { macro_pins.concat macro_pins_from(source_map, names) }
       end
       macro_pins
     end
@@ -807,6 +795,26 @@ module Solargraph
     end
 
     private
+
+    # @param source_map [SourceMap]
+    # @param names [Enumerable<String>]
+    # @return [Array<Pin::Base>]
+    def macro_pins_from source_map, names
+      method_candidates = source_map.macro_method_candidates(names)
+      Solargraph.logger.debug { "ApiMap#process_macros: processing source map for #{source_map.filename} with #{method_candidates.size} macro method candidates" }
+      method_candidates.flat_map do |node|
+        next [] unless node.children[0].nil?
+        name_pins = store.macro_method_name_pins[node.children[1].to_s]
+        next [] unless name_pins
+        closure = source_map.locate_closure_pin(node.location.line, node.location.column)
+        match = name_pins.find do |pin|
+          get_complex_type_methods(closure.return_type).include?(pin)
+        end
+        next [] unless match
+        chain = Solargraph::Parser::ParserGem::NodeChainer.chain(node)
+        match.macros.flat_map { |macro| macro.generate_pins_from(chain, match, source_map) }
+      end
+    end
 
     # A hash of source maps with filename keys.
     #
