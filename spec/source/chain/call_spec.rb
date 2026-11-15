@@ -111,6 +111,23 @@ describe Solargraph::Source::Chain::Call do
     expect(type.tag).to eq('String')
   end
 
+  it 'infers types from macros whose text was loaded frozen from a cache' do
+    source = Solargraph::Source.load_string(%(
+      class Foo
+        # @!macro
+        #   @return [$1]
+        def self.bar; end
+      end
+      Foo.bar(String)
+    ), 'test.rb')
+    api_map = Solargraph::ApiMap.new
+    api_map.map(source)
+    api_map.get_path_pins('Foo.bar').first.macros.each { |macro| macro.tag.text.freeze }
+    chain = Solargraph::Source::SourceChainer.chain(source, Solargraph::Position.new(6, 10))
+    type = chain.infer(api_map, Solargraph::Pin::ROOT_PIN, [])
+    expect(type.tag).to eq('String')
+  end
+
   it 'infers generic types from Array#reverse' do
     source = Solargraph::Source.load_string(%(
       # @type [Array<String>]
