@@ -27,16 +27,16 @@ module Solargraph
       # @param generics [::Array<Pin::String>, nil]
       # @param generic_defaults [Hash{String => ComplexType}]
       # @param [Hash{Symbol => Object}] splat
-      def initialize scope: :class, generics: nil, generic_defaults: {}, **splat
+      def initialize scope: :class, generics: nil, generic_defaults: Empty::HASH, **splat
         super(**splat)
         @scope = scope
-        @generics = generics
-        @generic_defaults = generic_defaults
+        @generics = generics && Empty.share_array(generics)
+        @generic_defaults = Empty.share_hash(generic_defaults)
       end
 
       # @return [Hash{String => ComplexType}]
       def generic_defaults
-        @generic_defaults ||= {}
+        @generic_defaults ||= Empty::HASH
       end
 
       # @param other [self]
@@ -68,7 +68,7 @@ module Solargraph
 
       # @return [::Array<String>]
       def generics
-        @generics ||= docstring.tags(:generic).map(&:name)
+        @generics ||= Empty.share_array(docstring.tags(:generic).map(&:name))
       end
 
       def to_rbs

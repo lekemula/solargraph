@@ -51,7 +51,7 @@ module Solargraph
       # @param type_assertion [String, nil] RBS type from a trailing
       #   rbs-inline `#: TYPE` comment on the assignment
       # @param [Hash{Symbol => Object}] splat
-      def initialize assignment: nil, assignments: [], mass_assignment: nil,
+      def initialize assignment: nil, assignments: Empty::ARRAY, mass_assignment: nil,
                      presence: nil, return_type: nil,
                      intersection_return_type: nil, exclude_return_type: nil,
                      type_assertion: nil,
@@ -59,7 +59,7 @@ module Solargraph
         super(**splat, return_type: return_type)
         @type_assertion = type_assertion
         # @type [Array<Parser::AST::Node, NodeRef>]
-        @assignments = (assignment.nil? ? [] : [assignment]) + assignments
+        @assignments = assignment.nil? ? Empty.share_array(assignments) : [assignment] + assignments
         # @type [nil, ::Array(Parser::AST::Node, Integer)]
         @mass_assignment = mass_assignment
         @intersection_return_type = intersection_return_type
@@ -86,7 +86,7 @@ module Solargraph
       end
 
       def detach_nodes! reload_from: nil
-        @assignments = @assignments.map { |node| NodeRef.detach(node, reload_from) }.compact
+        @assignments = Empty.share_array(@assignments.map { |node| NodeRef.detach(node, reload_from) }.compact)
         @mass_assignment = detach_mass_assignment(reload_from)
         super
       end

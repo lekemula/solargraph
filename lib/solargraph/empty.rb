@@ -55,5 +55,20 @@ module Solargraph
 
     ARRAY = EmptyArray.new.freeze
     HASH = EmptyHash.new.freeze
+
+    # @generic T
+    # @param array [::Array<generic<T>>]
+    # @return [::Array<generic<T>>] {ARRAY} if the array is empty, else the array
+    def self.share_array array
+      array.empty? ? ARRAY : array
+    end
+
+    # @generic K
+    # @generic V
+    # @param hash [::Hash<generic<K>, generic<V>>]
+    # @return [::Hash<generic<K>, generic<V>>] {HASH} if the hash is empty, else the hash
+    def self.share_hash hash
+      hash.empty? ? HASH : hash
+    end
   end
 end

@@ -73,7 +73,7 @@ module Solargraph
 
       # @return [::Array<String>]
       def parameter_names
-        @parameter_names ||= parameters.map(&:name)
+        @parameter_names ||= Empty.share_array(parameters.map(&:name))
       end
 
       def generics

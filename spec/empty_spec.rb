@@ -15,6 +15,12 @@ describe Solargraph::Empty do
     expect(loaded[1]).to be(described_class::HASH)
   end
 
+  it 'swaps empty collections for the shared ones' do
+    expect(described_class.share_array([])).to be(described_class::ARRAY)
+    expect(described_class.share_hash({})).to be(described_class::HASH)
+    expect(described_class.share_array([1])).to eq([1])
+  end
+
   it 'gives plain mutable collections from dup' do
     array = described_class::ARRAY.dup << 1
     hash = described_class::HASH.dup.merge!('a' => 1)

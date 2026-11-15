@@ -432,7 +432,7 @@ module Solargraph
         # tag's source is likely malformed.
 
         # @param tag [YARD::Tags::OverloadTag]
-        @overloads ||= docstring.tags(:overload).select(&:parameters).map do |tag|
+        @overloads ||= Empty.share_array(docstring.tags(:overload).select(&:parameters).map do |tag|
           Pin::Signature.new(
             generics: generics,
             # @param src [Array(String, String)]
@@ -453,7 +453,7 @@ module Solargraph
             return_type: ComplexType.try_parse(*tag.docstring.tags(:return).flat_map(&:types)),
             source: :overloads
           )
-        end
+        end)
       end
 
       def anon_splat?
@@ -491,7 +491,8 @@ module Solargraph
 
       protected
 
-      attr_writer :block, :signature_help, :documentation, :return_type
+      # @sg-ignore return_type= infers Boolean among its types
+      attr_writer :block, :documentation, :return_type
 
       def dodgy_visibility_source?
         # as of 2025-03-12, the RBS generator used for

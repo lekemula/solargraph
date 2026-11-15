@@ -58,7 +58,7 @@ module Solargraph
         @source = source
         @identity = nil
         @docstring = docstring
-        @directives = directives
+        @directives = directives && Empty.share_array(directives)
         @combine_priority = combine_priority
         # @type [ComplexType, ComplexType::UniqueType, nil]
         @binder = nil
@@ -574,7 +574,6 @@ module Solargraph
         @docstring ||= Solargraph::Source.parse_docstring('').to_docstring
       end
 
-      # @sg-ignore parse_comments will always set @directives
       # @return [::Array<YARD::Tags::Directive>]
       def directives
         parse_comments unless @directives
@@ -583,7 +582,7 @@ module Solargraph
 
       # @return [::Array<Solargraph::YardMap::Macro>]
       def macros
-        @macros ||= collect_macros
+        @macros ||= Empty.share_array(collect_macros)
       end
 
       def macro_names
@@ -684,8 +683,9 @@ module Solargraph
         result = dup
         result.return_type = return_type
         result.proxied = true
-        # Macros should have been processed already
-        result.macro_names.clear
+        # Macros should have been processed already. Assigned, not cleared,
+        # because the copy shares the original's array.
+        result.macro_names = Empty::ARRAY
         result
       end
 
@@ -774,7 +774,7 @@ module Solargraph
       # @return [ComplexType, ComplexType::UniqueType, nil]
       attr_writer :return_type
 
-      attr_writer :docstring, :directives
+      attr_writer :docstring, :directives, :macro_names
 
       private
 
@@ -796,15 +796,15 @@ module Solargraph
         # HACK: Avoid a NoMethodError on nil with empty overload tags
         if comments.nil? || comments.empty? || comments.strip.end_with?('@overload')
           @docstring = nil
-          @directives = []
-          @macro_names = []
+          @directives = Empty::ARRAY
+          @macro_names = Empty::ARRAY
         else
           # HACK: Pass a dummy code object to the parser for plugins that
           # expect it not to be nil
           parse = Solargraph::Source.parse_docstring(comments)
           @docstring = parse.to_docstring
-          @directives = parse.directives
-          @macro_names = collect_macro_names
+          @directives = Empty.share_array(parse.directives)
+          @macro_names = Empty.share_array(collect_macro_names)
         end
       end
 
