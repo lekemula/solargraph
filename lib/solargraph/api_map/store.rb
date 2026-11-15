@@ -17,15 +17,21 @@ module Solargraph
         index.pins
       end
 
+      # @return [Integer]
+      def pin_count
+        index.pin_count
+      end
+
       # @param pinsets [Array<Array<Pin::Base>>]
       #   - pinsets[0] = core Ruby pins
       #   - pinsets[1] = documentation/gem pins
       #   - pinsets[2] = convention pins
-      #   - pinsets[3] = workspace source pins (aka. "iced_pins")
-      #   - pinsets[4] = currently open file pins
+      #   - pinsets[3] = plugin addon pins
+      #   - pinsets[4] = workspace source pins (aka. "iced_pins")
+      #   - pinsets[5] = currently open file pins
       # @return [Boolean] True if the index was updated
-      def update *pinsets, &block
-        return catalog(pinsets, &block) if pinsets.length != @pinsets.length
+      def update(*pinsets, &)
+        return catalog(pinsets, &) if pinsets.length != @pinsets.length
 
         changed = pinsets.find_index.with_index { |pinset, idx| @pinsets[idx] != pinset }
         return false unless changed
@@ -43,9 +49,7 @@ module Solargraph
                                       @indexes[changed + idx - 1].merge(pins)
                                     end
         end
-        # @type [Index]
-        @index = @indexes.last.clone
-        @index = @index.merge(block.call) if block
+        top_layer(&)
         constants.clear
         cached_qualify_superclass.clear
         true
@@ -282,12 +286,12 @@ module Solargraph
         index.alias_hash[name]
       end
 
-      # @return [Array<String>]
+      # @return [Set<String>]
       def macro_method_names
         index.macro_method_names
       end
 
-      # @return [Hash{String => Array<Pin::Method>}]
+      # @return [Index::View<Pin::Method>]
       def macro_method_name_pins
         index.macro_method_name_pins
       end
@@ -302,7 +306,7 @@ module Solargraph
       # @param pinsets [Array<Array<Pin::Base>>]
       #
       # @return [true]
-      def catalog pinsets, &block
+      def catalog(pinsets, &)
         @pinsets = pinsets
         # @type [Array<Index>]
         @indexes = []
@@ -313,11 +317,21 @@ module Solargraph
             @indexes.push(@indexes.last&.merge(pins) || Solargraph::ApiMap::Index.new(pins))
           end
         end
-        @index = @indexes.last.clone
-        @index = @index.merge(block.call) if block
+        top_layer(&)
         constants.clear
         cached_qualify_superclass.clear
         true
+      end
+
+      # Put a fresh layer on top so lookups that combine several layers are
+      # memoized there and dropped on the next update. The block reads the
+      # store, so it runs against the updated layers.
+      #
+      # @return [void]
+      def top_layer
+        base = @indexes.last || Index.new
+        @index = base.merge([])
+        @index = base.merge(yield) if block_given?
       end
 
       # @return [Hash{::Array(String, String) => ::Array<Pin::Namespace>}]
@@ -336,32 +350,27 @@ module Solargraph
         index.pins_by_class(Pin::Symbol)
       end
 
-      # @return [Hash{String => Array<Pin::Reference::Superclass>}]
+      # @return [Index::View<Pin::Reference::Superclass>]
       def superclass_references
         index.superclass_references
       end
 
-      # @return [Hash{String => Array<Pin::Reference::Include>}]
+      # @return [Index::View<Pin::Reference::Include>]
       def include_references
         index.include_references
       end
 
-      # @return [Hash{String => Array<Solargraph::Pin::Reference::Include>}]
-      def include_reference_pins
-        index.include_reference_pins
-      end
-
-      # @return [Hash{String => Array<Pin::Reference::Prepend>}]
+      # @return [Index::View<Pin::Reference::Prepend>]
       def prepend_references
         index.prepend_references
       end
 
-      # @return [Hash{String => Array<Pin::Reference::Extend>}]
+      # @return [Index::View<Pin::Reference::Extend>]
       def extend_references
         index.extend_references
       end
 
-      # @return [Hash{String => Array<Pin::FactoryParameter>}]
+      # @return [Index::View<Pin::FactoryParameter>]
       def factory_parameter_hash
         index.factory_parameter_hash
       end
@@ -369,7 +378,6 @@ module Solargraph
       # @param name [String]
       # @return [Enumerable<Solargraph::Pin::Base>]
       def namespace_children name
-        return [] unless index.namespace_hash.key?(name)
         index.namespace_hash[name]
       end
 
