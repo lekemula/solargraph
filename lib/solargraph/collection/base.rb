@@ -29,7 +29,7 @@ module Solargraph
       def self.uncache(...)
         cache_file = new(...).cache_file
         FileUtils.rm_rf cache_file
-        Collection.mem_cache.delete cache_file
+        Collection.mem_cache.delete_if { |key, _| key == cache_file || key.start_with?("#{cache_file}|") }
       end
 
       private

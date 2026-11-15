@@ -51,6 +51,23 @@ module Solargraph
         end
       end
 
+      # The gem's pins combined with RBS signatures, cached in place of its own
+      # pins, so the pins the combination replaces are released.
+      #
+      # @param metagem [Metagem]
+      # @param signatures [String] identifies the signatures in the cache key
+      # @yieldreturn [Array<Pin::Base>] the signature pins
+      # @return [Array<Pin::Base>]
+      def self.combine metagem, signatures
+        collection = new(metagem)
+        Collection.cached("#{collection.cache_file}|#{signatures}") do
+          own_pins = collection.load
+          signature_pins = yield
+          Collection.mem_cache.delete collection.cache_file
+          signature_pins.empty? ? own_pins : RbsMap::Helpers.combine(own_pins, signature_pins)
+        end
+      end
+
       private
 
       # Caches written before the unreachable pins were dropped still hold them.

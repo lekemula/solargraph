@@ -35,4 +35,10 @@ describe Solargraph::Collection::Base do
     klass.uncache
     expect(File).not_to be_file(base.cache_file)
   end
+
+  it 'forgets pins combined from the cache when it deletes it' do
+    Solargraph::Collection.mem_cache["#{base.cache_file}|signatures"] = [pin]
+    klass.uncache
+    expect(Solargraph::Collection.mem_cache).to be_empty
+  end
 end

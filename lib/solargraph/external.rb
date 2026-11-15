@@ -144,21 +144,26 @@ module Solargraph
         unloaded_gems.add metagem
       else
         loaded_gems.add metagem
-        base_pins = Collection::Gem.load(metagem)
-        rbsc_pins = rbs_collection.load(metagem)
-        if rbsc_pins.empty?
-          pins.concat base_pins
-        else
-          pins.concat RbsMap::Helpers.combine(base_pins, rbsc_pins)
-        end
+        loaded_pins = gem_pins(metagem)
+        pins.concat loaded_pins
         # Gems might not declare stdlib dependencies as gem dependencies
         # (e.g., `activesupport` requires `date`)
-        base_pins.select { |pin| pin.is_a?(Pin::Reference::Require) && RbsMap::Stdlib.has?(pin.name) }
-                 .each do |pin|
-                   pins.concat Collection::Stdlib.load(pin.name) if loaded_stdlibs.add?(pin.name)
-                 end
+        loaded_pins.select { |pin| pin.is_a?(Pin::Reference::Require) && RbsMap::Stdlib.has?(pin.name) }
+                   .each do |pin|
+                     pins.concat Collection::Stdlib.load(pin.name) if loaded_stdlibs.add?(pin.name)
+                   end
       end
       load_dependencies metagem
+    end
+
+    # A gem's pins, combined with its signatures in the RBS collection.
+    #
+    # @param metagem [Metagem]
+    # @return [Array<Pin::Base>]
+    def gem_pins metagem
+      signatures = rbs_collection.signature_path(metagem)
+      return Collection::Gem.load(metagem) unless signatures
+      Collection::Gem.combine(metagem, signatures) { rbs_collection.load(metagem) }
     end
 
     def load_dependencies parent

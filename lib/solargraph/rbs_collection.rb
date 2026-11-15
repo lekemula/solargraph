@@ -10,12 +10,21 @@ module Solargraph
       @lockfile = File.expand_path(lockfile) if lockfile
     end
 
+    # Not memoized: the pins are combined into the gem's cached pins.
+    #
     # @param metagem [Metagem]
     # @return [Array<Pin::Base>]
     def load metagem
+      path = signature_path(metagem)
+      return [] unless path
+      RbsMap::Path.pins(path)
+    end
+
+    # @param metagem [Metagem]
+    # @return [String, nil] the directory of the gem's signatures
+    def signature_path metagem
       key = best_key(metagem)
-      return [] unless key
-      mem_cache[key] ||= RbsMap::Path.pins(gem_path_map[key])
+      gem_path_map[key] if key
     end
 
     def gem_keys
@@ -110,10 +119,6 @@ module Solargraph
                     else
                       { gems: [] }
                     end
-    end
-
-    def mem_cache
-      @mem_cache ||= {}
     end
   end
 end
