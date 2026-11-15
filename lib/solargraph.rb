@@ -50,6 +50,7 @@ module Solargraph
   autoload :TypeChecker,      'solargraph/type_checker'
   autoload :Environ,          'solargraph/environ'
   autoload :Equality,         'solargraph/equality'
+  autoload :Empty,            'solargraph/empty'
   autoload :Convention,       'solargraph/convention'
   autoload :Parser,           'solargraph/parser'
   autoload :RbsMap,           'solargraph/rbs_map'
