@@ -146,4 +146,22 @@ describe Solargraph::ApiMap::Store do
       expect(ref.name).to eq('Boolean')
     end
   end
+
+  describe '#fqns_pins' do
+    let(:store) do
+      methods = Array.new(2_000) { |i| Solargraph::Pin::Method.new(name: "m#{i}", closure: Solargraph::Pin::ROOT_PIN) }
+      described_class.new(methods + [Solargraph::Pin::Namespace.new(name: 'Foo')])
+    end
+
+    it 'finds namespaces among many root pins' do
+      expect(store.fqns_pins('Foo').map(&:path)).to eq(['Foo'])
+      expect(store.fqns_pins('Bar')).to be_empty
+    end
+
+    it 'keeps memoized results sized to their contents' do
+      require 'objspace'
+      expect(ObjectSpace.memsize_of(store.fqns_pins('Foo'))).to be < 1_000
+      expect(ObjectSpace.memsize_of(store.fqns_pins('Bar'))).to be < 1_000
+    end
+  end
 end
