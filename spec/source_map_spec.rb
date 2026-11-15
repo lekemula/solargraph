@@ -231,4 +231,26 @@ describe Solargraph::SourceMap do
     expect(paths).to include('Example.foo')
     expect(paths).to include('Example.bar')
   end
+
+  it 'lists the methods called without a receiver' do
+    map = described_class.load_string(%(
+      class Example
+        attr_reader :foo
+        def bar
+          baz(qux)
+          self.quux
+          Other.corge
+          baz
+        end
+      end
+    ))
+    expect(map.call_names).to contain_exactly('attr_reader', 'baz', 'qux')
+    expect(map.calls_any?(Set['qux', 'nope'])).to be(true)
+    expect(map.calls_any?(Set['quux', 'corge'])).to be(false)
+  end
+
+  it 'scans a resident source in place' do
+    map = described_class.load_string('foo', 'test.rb')
+    expect(map.scan_source { map.source }).to be(map.source)
+  end
 end
