@@ -45,6 +45,8 @@ module Solargraph
       @stamps = {}
       # @type [Set<String>]
       @stale = Set.new
+      # @type [Hash{String => Source}] sources of a scan that bypasses the LRU
+      @lent = {}
       @mutex = Mutex.new
     end
 
@@ -122,6 +124,44 @@ module Solargraph
       insert filename, source
     end
 
+    # A cached source, without marking it as recently used.
+    #
+    # @param filename [String]
+    # @return [Source, nil]
+    def peek filename
+      @mutex.synchronize { @lent[filename] || @open_sources[filename] || @lru[filename] }
+    end
+
+    # The text of a registered file on disk, read without parsing it and
+    # without caching anything.
+    #
+    # @param filename [String]
+    # @return [String, nil] nil under the same conditions as #fetch
+    def text filename
+      stamp = @mutex.synchronize { @stamps[filename] unless @stale.include?(filename) }
+      return nil if stamp.nil?
+      read(filename, stamp) || stale!(filename)
+    end
+
+    # Make a source available to node lookups while the block runs, without
+    # adding it to the LRU, so a scan of many files does not flush the
+    # sources of open files and of inference.
+    #
+    # @generic T
+    # @param source [Source]
+    # @yieldreturn [generic<T>]
+    # @return [generic<T>]
+    def lend source
+      name = source.filename
+      return yield if name.nil?
+      @mutex.synchronize { @lent[name] = source }
+      begin
+        yield
+      ensure
+        @mutex.synchronize { @lent.delete name }
+      end
+    end
+
     # @param ref [NodeRef]
     # @return [::Parser::AST::Node, nil]
     def node ref
@@ -152,8 +192,8 @@ module Solargraph
     # @param filename [String]
     # @return [Source, nil]
     def lookup filename
-      open_source = @open_sources[filename]
-      return open_source if open_source
+      held = @lent[filename] || @open_sources[filename]
+      return held if held
       cached = @lru.delete(filename)
       # @sg-ignore Hash#delete returns generic<T>
       @lru[filename] = cached if cached
@@ -164,13 +204,22 @@ module Solargraph
     # @param stamp [Array(Time, Integer)]
     # @return [Source, nil]
     def load filename, stamp
+      code = read(filename, stamp)
+      return nil if code.nil?
+      source = Source.load_string(code, filename)
+      source.node
+      source
+    end
+
+    # @param filename [String]
+    # @param stamp [Array(Time, Integer)]
+    # @return [String, nil]
+    def read filename, stamp
       stat = File.stat(filename)
       return nil unless [stat.mtime, stat.size] == stamp
       code = File.read(filename)
       return nil unless code.bytesize == stamp.last
-      source = Source.load_string(code, filename)
-      source.node
-      source
+      code
     rescue SystemCallError
       nil
     end

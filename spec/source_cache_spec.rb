@@ -95,4 +95,44 @@ describe Solargraph::SourceCache do
     expect(found).to eq(node)
     expect(Solargraph::Range.from_node(found)).to eq(Solargraph::Range.from_node(node))
   end
+
+  it 'peeks at a cached source without marking it used' do
+    files = %w[a b c].map { |name| write_file("#{name}.rb", "class #{name.upcase}; end") }
+    files.each { |file| cache.register file }
+    first = cache.fetch(files[0])
+    cache.fetch(files[1])
+    expect(cache.peek(files[0])).to be(first)
+    expect(cache.peek(files[2])).to be_nil
+    cache.fetch(files[2])
+    expect(cache.cached_filenames).to eq([files[1], files[2]])
+  end
+
+  it 'reads the text of a registered file without caching it' do
+    file = write_file('a.rb', 'class A; end')
+    expect(cache.text(file)).to be_nil
+    cache.register file
+    expect(cache.text(file)).to eq('class A; end')
+    expect(cache.cached_filenames).to be_empty
+  end
+
+  it 'reports a file stale when its text changed since it was registered' do
+    file = write_file('a.rb', 'class A; end')
+    cache.register file
+    File.write(file, 'class A; def foo; end; end')
+    expect(cache.text(file)).to be_nil
+    expect(cache.take_stale { true }).to eq([file])
+  end
+
+  it 'serves a lent source without adding it to the LRU' do
+    file = write_file('a.rb', "class A\n  def foo\n    1\n  end\nend\n")
+    cache.register file
+    source = Solargraph::Source.load(file)
+    ref = Solargraph::NodeRef.detach(source.node.children[2], file)
+    cache.lend(source) do
+      expect(cache.fetch(file)).to be(source)
+      expect(cache.node(ref)).to be(source.node.children[2])
+    end
+    expect(cache.cached_filenames).to be_empty
+    expect(cache.fetch(file)).not_to be(source)
+  end
 end
