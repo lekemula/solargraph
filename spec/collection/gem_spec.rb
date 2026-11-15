@@ -42,13 +42,20 @@ describe Solargraph::Collection::Gem do
               @opts = opts
             end
 
+            included do
+              def from_block; end
+            end
+
             def each_item
               @items.each { |item| yield item }
             end
 
+            # Waits until the thing is ready.
             def wait
               sleep 1 while busy?
               sleep 1 until ready?
+              busy? ? :busy : :idle
+              if busy? then name else nil end
             end
           end
         end
@@ -129,5 +136,80 @@ describe Solargraph::Collection::Gem do
     FileUtils.mkdir_p File.dirname(described_class.new(metagem).cache_file)
     File.binwrite described_class.new(metagem).cache_file, Marshal.dump(pins)
     expect(described_class.load(metagem).map(&:path)).to include('NodeFree::Thing#initialize')
+  end
+
+  describe 'pins nothing reaches' do
+    # @param pins [Array<Solargraph::Pin::Base>]
+    # @return [Array<Class>]
+    def dropped_classes_in pins
+      dropped = [Solargraph::Pin::CompoundStatement, Solargraph::Pin::While, Solargraph::Pin::Until,
+                 Solargraph::Pin::Symbol, Solargraph::Pin::Block]
+      pins.map(&:class).uniq & dropped
+    end
+
+    let(:written) do
+      described_class.load(metagem)
+      Marshal.load(File.binread(described_class.new(metagem).cache_file)) # rubocop:disable Security/MarshalLoad
+    end
+
+    it 'drops compound statement, loop, symbol and block pins from the cache file' do
+      expect(dropped_classes_in(written)).to be_empty
+    end
+
+    it 'keeps closures, which subclass CompoundStatement' do
+      expect(written.map(&:path)).to include('NodeFree', 'NodeFree::Thing', 'NodeFree::Thing#wait')
+    end
+
+    it 'keeps methods defined in a dropped block' do
+      method = written.find { |pin| pin.path == 'NodeFree::Thing#from_block' }
+      expect(method.closure).to be_a(Solargraph::Pin::Block)
+    end
+
+    it 'drops them from cache files written before the drop' do
+      pins = Solargraph::SourceMap.load(File.join(@gem_dir, 'lib', 'node_free.rb')).pins
+      expect(dropped_classes_in(pins)).not_to be_empty
+      FileUtils.mkdir_p File.dirname(described_class.new(metagem).cache_file)
+      File.binwrite described_class.new(metagem).cache_file, Marshal.dump(pins)
+      expect(dropped_classes_in(described_class.load(metagem))).to be_empty
+    end
+  end
+
+  describe 'requests into the gem' do
+    let(:filename) { File.expand_path('app.rb') }
+    let(:source) do
+      Solargraph::Source.load_string(<<~CODE, filename)
+        thing = NodeFree::Thing.new("a")
+        thing.wait
+        ready = thing.ready?
+        thing.size
+      CODE
+    end
+    let(:api_map) do
+      gem_pins = described_class.load(metagem)
+      external = instance_double(Solargraph::External, update: true, pins: gem_pins, configured_gem_names: [])
+      api_map = Solargraph::ApiMap.new
+      allow(api_map).to receive(:external).and_return(external)
+      api_map.map(source)
+    end
+
+    it 'goes to a gem definition' do
+      pin = api_map.clip_at(filename, [0, 19]).define.first
+      expect(pin.location.filename).to eq(File.join(@gem_dir, 'lib', 'node_free.rb'))
+    end
+
+    it 'hovers over a gem method' do
+      pin = api_map.clip_at(filename, [1, 8]).define.first
+      expect(pin.documentation).to include('Waits until the thing is ready')
+    end
+
+    it 'completes gem methods' do
+      names = api_map.clip_at(filename, [3, 6]).complete.pins.map(&:name)
+      expect(names).to include('wait', 'ready?', 'size', 'name', 'each_item')
+    end
+
+    it 'infers types from gem pins' do
+      type = api_map.clip_at(filename, [2, 3]).infer
+      expect(type.to_s).to eq('Boolean')
+    end
   end
 end

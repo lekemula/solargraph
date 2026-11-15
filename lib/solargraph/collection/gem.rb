@@ -34,7 +34,33 @@ module Solargraph
         metagem.cacheable? && File.exist?(new(metagem).cache_file)
       end
 
+      # Pin classes that only the mapping of their own file reads. Matched by
+      # exact class: Closure subclasses CompoundStatement.
+      UNREACHABLE = [Pin::CompoundStatement, Pin::While, Pin::Until].freeze
+
+      # The gem pins a request can reach. Symbol pins only serve `:` symbol
+      # completion, so symbols that appear only in gems are not offered there.
+      # Block pins are only looked up by a location in the file being inferred,
+      # which is never a gem file.
+      #
+      # @param pins [Array<Pin::Base>]
+      # @return [Array<Pin::Base>]
+      def self.reachable pins
+        pins.reject do |pin|
+          UNREACHABLE.include?(pin.class) || pin.is_a?(Pin::Symbol) || pin.is_a?(Pin::Block)
+        end
+      end
+
       private
+
+      # Caches written before the unreachable pins were dropped still hold them.
+      #
+      # @return [Array<Pin::Base>, nil]
+      def file_cache_pins
+        pins = super
+        return if pins.nil?
+        Gem.reachable(pins)
+      end
 
       def with_yard
         code_objects = Yardoc.load!(metagem)
@@ -51,6 +77,7 @@ module Solargraph
         bench = Bench.new(source_maps: source_maps)
         source_pins = ApiMap.new.catalog(bench).pins.select { |pin| files.include?(pin.filename) }
         # After the catalog, whose macro expansion reads the nodes
+        source_pins = Gem.reachable(source_pins)
         detach_nodes source_pins
 
         rbs_pins = RbsMap::Gem.pins(metagem)
