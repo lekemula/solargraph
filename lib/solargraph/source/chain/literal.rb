@@ -11,8 +11,11 @@ module Solargraph
         # @return [::String, ::Symbol]
         attr_reader :value
 
+        # @sg-ignore nil once the source changed on disk after eviction
         # @return [Parser::AST::Node]
-        attr_reader :node
+        def node
+          NodeRef.resolve(@node)
+        end
 
         # @param type [String]
         # @param node [Parser::AST::Node, Object]

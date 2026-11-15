@@ -109,18 +109,20 @@ module Solargraph
         # @type [Parser::AST::Node, nil]
         else_clause = if_node.children[2]
 
-        unless enclosing_breakable_pin.nil?
+        breakable_end = enclosing_breakable_pin&.end_position
+        unless breakable_end.nil?
           rest_of_breakable_body = Range.new(get_node_end_position(if_node),
-                                             get_node_end_position(enclosing_breakable_pin.node))
+                                             breakable_end)
 
           false_ranges << rest_of_breakable_body if always_breaks?(then_clause)
 
           true_ranges << rest_of_breakable_body if always_breaks?(else_clause)
         end
 
-        unless enclosing_compound_statement_pin.node.nil?
+        compound_end = enclosing_compound_statement_pin&.end_position
+        unless compound_end.nil?
           rest_of_returnable_body = Range.new(get_node_end_position(if_node),
-                                              get_node_end_position(enclosing_compound_statement_pin.node))
+                                              compound_end)
 
           #
           # if one of the clauses always leaves the compound

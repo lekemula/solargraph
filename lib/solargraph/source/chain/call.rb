@@ -40,9 +40,9 @@ module Solargraph
           !!@block
         end
 
-        def detach_nodes!
-          arguments.each(&:detach_nodes!)
-          block&.detach_nodes!
+        def detach_nodes! reload_from: nil
+          arguments.each { |arg| arg.detach_nodes!(reload_from: reload_from) }
+          block&.detach_nodes!(reload_from: reload_from)
           super
         end
 
@@ -181,7 +181,6 @@ module Solargraph
                               # @sg-ignore Need to add nil check here
                               new_signature_pin.return_type
                             else
-                              # @sg-ignore Need to add nil check here
                               named_types = pin.parameter_names.zip(arguments.map { |arg| ComplexType.try_parse(simple_convert(arg.node).to_s) }).to_h
                               pin.typify(api_map).expand(named_types)
                             end

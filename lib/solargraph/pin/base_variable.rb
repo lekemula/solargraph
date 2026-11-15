@@ -8,10 +8,8 @@ module Solargraph
       # include Solargraph::Source::NodeMethods
       include Solargraph::Parser::NodeMethods
 
-      # @return [Array<Parser::AST::Node>]
-      attr_reader :assignments
-
-      attr_accessor :mass_assignment
+      # @return [::Array(Parser::AST::Node, Integer), ::Array(NodeRef, Integer), nil]
+      attr_writer :mass_assignment
 
       # @return [Range, nil]
       attr_reader :presence
@@ -60,6 +58,7 @@ module Solargraph
                      **splat
         super(**splat)
         @type_assertion = type_assertion
+        # @type [Array<Parser::AST::Node, NodeRef>]
         @assignments = (assignment.nil? ? [] : [assignment]) + assignments
         # @type [nil, ::Array(Parser::AST::Node, Integer)]
         @mass_assignment = mass_assignment
@@ -86,16 +85,23 @@ module Solargraph
         result
       end
 
-      def detach_nodes!
-        @assignments = []
-        @assignment = nil
-        @mass_assignment = nil
+      def detach_nodes! reload_from: nil
+        @assignments = @assignments.map { |node| NodeRef.detach(node, reload_from) }.compact
+        @mass_assignment = detach_mass_assignment(reload_from)
         super
       end
 
-      def reset_generated!
-        @assignment = nil
-        super
+      # @return [Array<Parser::AST::Node>]
+      def assignments
+        @assignments.map { |node| NodeRef.resolve(node) }.compact
+      end
+
+      # @return [::Array(Parser::AST::Node, Integer), nil]
+      def mass_assignment
+        return nil if @mass_assignment.nil?
+        node, index = @mass_assignment
+        resolved = NodeRef.resolve(node)
+        resolved && [resolved, index]
       end
 
       def combine_with other, attrs = {}
@@ -105,7 +111,7 @@ module Solargraph
                                   # tells you if the arg is optional or not.  Prefer a
                                   # provided value if we have one here since we can't rely on
                                   # it from RBS so we can infer from it and typecheck on it.
-                                  assignment: choose(other, :assignment),
+                                  assignment: choose(other, :stored_assignment),
                                   assignments: new_assignments,
                                   mass_assignment: combine_mass_assignment(other),
                                   return_type: combine_return_type(other),
@@ -119,27 +125,27 @@ module Solargraph
 
       # @param other [self]
       #
-      # @return [Array(AST::Node, Integer), nil]
+      # @return [::Array(Parser::AST::Node, Integer), ::Array(NodeRef, Integer), nil]
       def combine_mass_assignment other
         # @todo pick first non-nil arbitrarily - we don't yet support
         #   mass assignment merging
-        mass_assignment || other.mass_assignment
+        stored_mass_assignment || other.stored_mass_assignment
       end
 
       # @return [Parser::AST::Node, nil]
       def assignment
-        @assignment ||= assignments.last
+        NodeRef.resolve(@assignments.last)
       end
 
       # @param other [self]
       #
       # @return [::Array<Parser::AST::Node>]
       def combine_assignments other
-        (other.assignments + assignments).uniq
+        (other.stored_assignments + stored_assignments).uniq
       end
 
       def inner_desc
-        super + ", presence=#{presence.inspect}, assignments=#{assignments}, " \
+        super + ", presence=#{presence.inspect}, assignments=#{stored_assignments}, " \
                 "intersection_return_type=#{intersection_return_type&.rooted_tags.inspect}, " \
                 "exclude_return_type=#{exclude_return_type&.rooted_tags.inspect}"
       end
@@ -202,8 +208,9 @@ module Solargraph
         # @todo should handle merging types from mass assignments as
         #   well so that we can do better flow sensitive typing with
         #   multiple assignments
-        unless @mass_assignment.nil?
-          mass_node, index = @mass_assignment
+        mass = mass_assignment
+        unless mass.nil?
+          mass_node, index = mass
           types = return_types_from_node(mass_node, api_map)
           types.map! do |type|
             if type.tuple?
@@ -225,11 +232,11 @@ module Solargraph
       def == other
         return false unless super
         # @sg-ignore Should add type check on other
-        assignment == other.assignment
+        NodeRef.same?(stored_assignment, other.stored_assignment)
       end
 
       def type_desc
-        "#{super} = #{assignment&.type.inspect}"
+        "#{super} = #{stored_assignment&.type.inspect}"
       end
 
       # @return [ComplexType, nil]
@@ -310,10 +317,34 @@ module Solargraph
 
       attr_accessor :exclude_return_type, :intersection_return_type
 
+      # @return [Array<Parser::AST::Node, NodeRef>]
+      def stored_assignments
+        @assignments
+      end
+
+      # @return [Parser::AST::Node, NodeRef, nil]
+      def stored_assignment
+        @assignments.last
+      end
+
+      # @return [::Array(Parser::AST::Node, Integer), ::Array(NodeRef, Integer), nil]
+      def stored_mass_assignment
+        @mass_assignment
+      end
+
       # @return [Range]
       attr_writer :presence
 
       private
+
+      # @param reload_from [String, nil]
+      # @return [::Array(Parser::AST::Node, Integer), ::Array(NodeRef, Integer), nil]
+      def detach_mass_assignment reload_from
+        return nil if @mass_assignment.nil?
+        node, index = @mass_assignment
+        detached = NodeRef.detach(node, reload_from)
+        detached && [detached, index]
+      end
 
       # @param api_map [ApiMap]
       # @param raw_return_type [ComplexType, ComplexType::UniqueType]

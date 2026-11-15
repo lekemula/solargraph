@@ -63,8 +63,8 @@ module Solargraph
         end
       end
 
-      def detach_nodes!
-        @receiver_chain&.detach_nodes!
+      def detach_nodes! reload_from: nil
+        @receiver_chain&.detach_nodes!(reload_from: reload_from)
         super
       end
 

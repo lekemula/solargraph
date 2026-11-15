@@ -17,14 +17,17 @@ module Solargraph
       # The constant name the assigned value refers to, e.g. `Inner::Error`
       # for `Error = Inner::Error`
       #
-      # @return [String]
+      # @sg-ignore @alias_name is false once detached from a constant that is not an alias
+      # @return [String, nil]
       def alias_name
+        # false once detached from a constant that is not an alias
+        return nil if @alias_name == false
         # @sg-ignore Need to add nil check here
         @alias_name || Parser::NodeMethods.unpack_name(assignment)
       end
 
-      def detach_nodes!
-        @alias_name = alias_name
+      def detach_nodes! reload_from: nil
+        @alias_name = alias_name || false
         super
       end
 
@@ -52,7 +55,7 @@ module Solargraph
 
       protected
 
-      # @return [String, nil]
+      # @return [String, Boolean, nil]
       def detached_alias_name
         @alias_name
       end

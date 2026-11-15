@@ -185,8 +185,11 @@ module Solargraph
       # Drop references to Parser AST nodes, which keep the whole syntax tree
       # and source text of the pin's file alive.
       #
+      # @param reload_from [String, nil] The file the pin was mapped from. Its
+      #   nodes become NodeRefs that get parsed again on demand. Without it,
+      #   nodes are dropped.
       # @return [self]
-      def detach_nodes!
+      def detach_nodes! reload_from: nil
         self
       end
 
@@ -256,11 +259,13 @@ module Solargraph
       # @sg-ignore
       # @return [undefined, nil]
       def choose other, attr
-        results = [self, other].map(&attr).compact
+        # @param pin [Base]
+        results = [self, other].map { |pin| pin.send(attr) }.compact
         # true and false are different classes and can't be sorted
 
         return true if results.any? { |r| [true, false].include?(r) }
-        return results.first if results.any? { |r| r.is_a? AST::Node }
+        # @sg-ignore results are untyped attribute values
+        return results.first if results.any? { |r| r.is_a?(AST::Node) || r.is_a?(NodeRef) }
         results.min
       rescue StandardError
         warn("Problem handling #{attr} for \n#{inspect}\n and \n#{other.inspect}\n\n#{send(attr).inspect} vs #{other.send(attr).inspect}")

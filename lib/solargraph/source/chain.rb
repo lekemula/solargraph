@@ -47,8 +47,6 @@ module Solargraph
       # @return [::Array<Source::Chain::Link>]
       attr_reader :links
 
-      attr_reader :node
-
       # @param node [Parser::AST::Node, nil]
       # @param links [::Array<Chain::Link>]
       # @param splat [Boolean]
@@ -65,10 +63,17 @@ module Solargraph
         @splat = splat
       end
 
+      # @sg-ignore nil once the source changed on disk after eviction
+      # @return [Parser::AST::Node]
+      def node
+        NodeRef.resolve(@node)
+      end
+
+      # @param reload_from [String, nil] see Pin::Base#detach_nodes!
       # @return [self]
-      def detach_nodes!
-        @node = nil
-        links.each(&:detach_nodes!)
+      def detach_nodes! reload_from: nil
+        @node = NodeRef.detach(@node, reload_from)
+        links.each { |link| link.detach_nodes!(reload_from: reload_from) }
         self
       end
 
@@ -343,7 +348,7 @@ module Solargraph
 
       # @sg-ignore Fix "Not enough arguments to Module#protected"
       def equality_fields
-        [links, node]
+        [links, NodeRef.key(@node)]
       end
     end
   end
