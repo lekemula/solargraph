@@ -225,29 +225,7 @@ module Solargraph
     # @todo Take filename/position instead of filename/line/column
     def definitions_at filename, line, column
       sync_catalog
-      position = Position.new(line, column)
-      cursor = Source::Cursor.new(read(filename), position)
-      if cursor.comment?
-        source = read(filename)
-        offset = Solargraph::Position.to_offset(source.code, Solargraph::Position.new(line, column))
-        # @type [MatchData, nil]
-        lft = source.code[0..(offset - 1)]&.match(/\[[a-z0-9_:<, ]*?([a-z0-9_:]*)\z/i)
-        # @type [MatchData, nil]
-        rgt = source.code[offset..]&.match(/^([a-z0-9_]*)(:[a-z0-9_:]*)?[\]>, ]/i)
-        if lft && rgt
-          # @sg-ignore lft and rgt are checked for nil above
-          tag = (lft[1] + rgt[1]).sub(/:+$/, '')
-          clip = mutex.synchronize { api_map.clip(cursor) }
-          clip.translate tag
-        else
-          []
-        end
-      else
-        mutex.synchronize do
-          clip = api_map.clip(cursor)
-          clip.define.map { |pin| pin.realize(api_map) }
-        end
-      end
+      definitions_in read(filename), Position.new(line, column)
     rescue FileNotFoundError => e
       handle_file_not_found(filename, e)
     end
@@ -576,6 +554,33 @@ module Solargraph
     end
 
     private
+
+    # @param source [Source]
+    # @param position [Position]
+    # @return [Array<Solargraph::Pin::Base>]
+    def definitions_in source, position
+      cursor = Source::Cursor.new(source, position)
+      if cursor.comment?
+        offset = Solargraph::Position.to_offset(source.code, position)
+        # @type [MatchData, nil]
+        lft = source.code[0..(offset - 1)]&.match(/\[[a-z0-9_:<, ]*?([a-z0-9_:]*)\z/i)
+        # @type [MatchData, nil]
+        rgt = source.code[offset..]&.match(/^([a-z0-9_]*)(:[a-z0-9_:]*)?[\]>, ]/i)
+        if lft && rgt
+          # @sg-ignore lft and rgt are checked for nil above
+          tag = (lft[1] + rgt[1]).sub(/:+$/, '')
+          clip = mutex.synchronize { api_map.clip(cursor) }
+          clip.translate tag
+        else
+          []
+        end
+      else
+        mutex.synchronize do
+          clip = api_map.clip(cursor)
+          clip.define.map { |pin| pin.realize(api_map) }
+        end
+      end
+    end
 
     # @return [Hash{String => Array<String>}]
     def source_map_external_require_hash
