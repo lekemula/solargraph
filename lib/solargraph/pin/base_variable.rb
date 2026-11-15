@@ -86,6 +86,13 @@ module Solargraph
         result
       end
 
+      def detach_nodes!
+        @assignments = []
+        @assignment = nil
+        @mass_assignment = nil
+        super
+      end
+
       def reset_generated!
         @assignment = nil
         super

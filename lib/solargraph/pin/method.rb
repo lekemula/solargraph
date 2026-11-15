@@ -81,6 +81,12 @@ module Solargraph
         super(other, new_attrs)
       end
 
+      def detach_nodes!
+        @node = nil
+        @signatures&.each(&:detach_nodes!)
+        super
+      end
+
       # @param other [Pin::Method]
       def == other
         super && other.node == node

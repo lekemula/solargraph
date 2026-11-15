@@ -6,10 +6,31 @@ module Solargraph
       attr_reader :visibility
 
       # @param visibility [::Symbol] The visibility of the constant (:public, :protected, or :private)
+      # @param alias_name [String, nil] The value of #alias_name kept after #detach_nodes!
       # @param splat [Hash] Additional options supported by superclasses
-      def initialize visibility: :public, **splat
+      def initialize visibility: :public, alias_name: nil, **splat
         super(**splat)
         @visibility = visibility
+        @alias_name = alias_name
+      end
+
+      # The constant name the assigned value refers to, e.g. `Inner::Error`
+      # for `Error = Inner::Error`
+      #
+      # @return [String]
+      def alias_name
+        # @sg-ignore Need to add nil check here
+        @alias_name || Parser::NodeMethods.unpack_name(assignment)
+      end
+
+      def detach_nodes!
+        @alias_name = alias_name
+        super
+      end
+
+      def combine_with other, attrs = {}
+        detached = other.detached_alias_name if other.is_a?(Constant)
+        super(other, { alias_name: @alias_name || detached }.merge(attrs))
       end
 
       def return_type
@@ -27,6 +48,13 @@ module Solargraph
 
       def path
         @path ||= context.namespace.to_s.empty? ? name : "#{context.namespace}::#{name}"
+      end
+
+      protected
+
+      # @return [String, nil]
+      def detached_alias_name
+        @alias_name
       end
 
       private

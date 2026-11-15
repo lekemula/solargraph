@@ -65,6 +65,13 @@ module Solargraph
         @splat = splat
       end
 
+      # @return [self]
+      def detach_nodes!
+        @node = nil
+        links.each(&:detach_nodes!)
+        self
+      end
+
       # @return [Chain]
       def base
         # @sg-ignore Need to add nil check here

@@ -202,6 +202,26 @@ describe Solargraph::Pin::Parameter do
     expect(pin1.combine_with(pin2).comments).to eq('a comment')
   end
 
+  context 'with detached nodes' do
+    let(:map) { Solargraph::SourceMap.load_string('def foo bar, opts = {}, count = 1; end', 'test.rb') }
+    let(:params) { map.pins.find { |pin| pin.path == '#foo' }.parameters }
+
+    it 'keeps treating a hash default as a keyword splat' do
+      params.each(&:detach_nodes!)
+      expect(params.map(&:kwrestarg?)).to eq([false, true, false])
+    end
+
+    it 'drops the assignment node' do
+      params.each(&:detach_nodes!)
+      expect(params.map(&:assignment)).to eq([nil, nil, nil])
+    end
+
+    it 'keeps the hash default when combined' do
+      detached = params[1].dup.detach_nodes!
+      expect(detached.combine_with(params[1].dup.detach_nodes!)).to be_kwrestarg
+    end
+  end
+
   it 'does not combine with local variables in different closures' do
     source = Solargraph::Source.load_string(%(
       class Example

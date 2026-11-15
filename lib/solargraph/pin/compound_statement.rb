@@ -50,6 +50,11 @@ module Solargraph
         super(**splat)
         @node = node
       end
+
+      def detach_nodes!
+        @node = nil
+        super
+      end
     end
   end
 end

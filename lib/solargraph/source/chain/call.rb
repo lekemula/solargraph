@@ -40,6 +40,12 @@ module Solargraph
           !!@block
         end
 
+        def detach_nodes!
+          arguments.each(&:detach_nodes!)
+          block&.detach_nodes!
+          super
+        end
+
         # @param api_map [ApiMap]
         # @param name_pin [Pin::Closure] name_pin.binder should give us the type of the object on which 'word' will be invoked
         # @param locals [::Array<Pin::LocalVariable>]
