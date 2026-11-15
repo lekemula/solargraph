@@ -96,9 +96,17 @@ module Solargraph
       source_hash.keys
     end
 
-    # @return [Array<Solargraph::Source>]
+    # Every source of the workspace. Evicted sources get loaded again, one
+    # by one through the SourceCache.
+    #
+    # @return [Enumerator<Solargraph::Source>]
     def sources
-      source_hash.values
+      Enumerator.new do |yielder|
+        filenames.each do |filename|
+          found = source(filename)
+          yielder << found if found
+        end
+      end
     end
 
     # @param filename [String]
@@ -109,10 +117,29 @@ module Solargraph
 
     # Get a source by its filename.
     #
+    # @sg-ignore flow sensitive typing needs to handle unless in guards
     # @param filename [String]
-    # @return [Solargraph::Source]
+    # @return [Solargraph::Source, nil] nil if the file is evicted and changed
+    #   on disk since it was mapped
     def source filename
-      source_hash[filename]
+      resident = source_hash[filename]
+      return resident if resident
+      return nil unless source_hash.key?(filename)
+      SourceCache.instance.fetch(filename)
+    end
+
+    # Drop a source's text after its file was mapped. The file stays in the
+    # workspace.
+    #
+    # @param filename [String]
+    # @return [void]
+    def evict filename
+      source_hash[filename] = nil if source_hash.key?(filename)
+    end
+
+    # @param filename [String]
+    def evicted? filename
+      source_hash.key?(filename) && source_hash[filename].nil?
     end
 
     # True if the path resolves to a file in the workspace's require paths.
@@ -154,7 +181,8 @@ module Solargraph
     # @param updater [Source::Updater]
     # @return [void]
     def synchronize! updater
-      source_hash[updater.filename] = source_hash[updater.filename].synchronize(updater)
+      # @sg-ignore Need to add nil check here
+      source_hash[updater.filename] = source(updater.filename).synchronize(updater)
     end
 
     # @sg-ignore return type could not be inferred
@@ -202,7 +230,7 @@ module Solargraph
     # @return [Hash]
     attr_reader :server
 
-    # @return [Hash{String => Solargraph::Source}]
+    # @return [Hash{String => Solargraph::Source, nil}] nil for an evicted source
     def source_hash
       @source_hash ||= {}
     end

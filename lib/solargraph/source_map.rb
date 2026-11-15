@@ -14,8 +14,19 @@ module Solargraph
     autoload :Data,          'solargraph/source_map/data'
     autoload :Call,          'solargraph/source_map/call'
 
+    # The mapped source. After #evict! it is parsed again from disk through
+    # the SourceCache.
+    #
+    # @raise [FileNotFoundError] if the evicted file changed or cannot be read
     # @return [Source]
-    attr_reader :source
+    def source
+      resident = @source
+      return resident if resident
+      name = @filename
+      loaded = SourceCache.instance.fetch(name) if name
+      return loaded if loaded
+      raise FileNotFoundError, "Source of #{name} is not available"
+    end
 
     # @return [Array<Pin::Base>]
     def pins
@@ -35,6 +46,7 @@ module Solargraph
     # @param source [Source]
     def initialize source
       @source = source
+      @filename = source.filename
       # @type [Array<Pin::Base>, nil]
       @convention_pins = nil
 
@@ -56,22 +68,8 @@ module Solargraph
       @pin_select_cache[klass] ||= pin_class_hash.select { |key, _| key <= klass }.values.flatten
     end
 
-    # A hash representing the state of the source map's API.
-    #
-    # ApiMap#catalog uses this value to determine whether it needs to clear its
-    # cache.
-    #
-    # @return [Integer]
-    def api_hash
-      @api_hash ||= (pins_by_class(Pin::Constant) + pins_by_class(Pin::Namespace).select do |pin|
-        pin.namespace.to_s > ''
-      end + pins_by_class(Pin::Reference) + pins_by_class(Pin::Method).map(&:node) + locals).hash
-    end
-
     # @return [String, nil]
-    def filename
-      source.filename
-    end
+    attr_reader :filename
 
     # @return [String]
     def code
@@ -87,10 +85,39 @@ module Solargraph
       symbolized = method_names.map(&:to_sym)
       node_map.find_by_type(:send).select { |node| node.children[0].nil? && symbolized.include?(node.children[1].to_sym) }
               .map { |node| Call.new(self, Parser.chain(node), locate_namespace_pin(node.loc.line, node.loc.column)) }
+    rescue FileNotFoundError
+      []
     end
 
     def node_map
-      @node_map ||= Source::NodeMap.new(source.node)
+      return @node_map if @node_map
+      # @sg-ignore Need to add nil check here
+      map = Source::NodeMap.new(source.node)
+      @node_map = map unless evicted?
+      map
+    end
+
+    # True if the source's text and syntax tree were dropped after mapping.
+    def evicted?
+      @source.nil?
+    end
+
+    # Drop the source's text and syntax tree once the pins are generated. Pins
+    # keep NodeRefs and parse their nodes again on demand through the
+    # SourceCache, which gets the file's state on disk now.
+    #
+    # @return [void]
+    def evict!
+      name = filename
+      return if evicted? || name.nil?
+      SourceCache.instance.register name
+      (all_pins + locals).each { |pin| pin.detach_nodes!(reload_from: name) }
+      document_symbols
+      @source = nil
+      @node_map = nil
+      @method_call_nodes = nil
+      @macro_method_names = nil
+      @macro_method_candidates = nil
     end
 
     # @return [Environ]
@@ -169,16 +196,25 @@ module Solargraph
 
     # @return [Array<Parser::AST::Node>]
     def method_call_nodes
+      return @method_call_nodes if @method_call_nodes
       # @sg-ignore node expected Parser::AST::Node, received Parser::AST::Node, nil
-      @method_call_nodes ||= Solargraph::Parser::ParserGem::NodeMethods.call_nodes_from(source.node)
+      nodes = Solargraph::Parser::ParserGem::NodeMethods.call_nodes_from(source.node)
+      @method_call_nodes = nodes unless evicted?
+      nodes
+    rescue FileNotFoundError
+      []
     end
 
+    # @sg-ignore flow sensitive typing needs to handle && in modifiers
     # @param macro_method_names [Set<String>]
     # @return [Array<Parser::AST::Node>]
     def macro_method_candidates macro_method_names
-      return @macro_method_candidates if @macro_method_names == macro_method_names
+      cached = @macro_method_candidates
+      return cached if cached && @macro_method_names == macro_method_names
+      candidates = method_call_nodes.select { |node| macro_method_names.include?(node.children[1].to_s) }
+      return candidates if evicted?
       @macro_method_names = macro_method_names
-      @macro_method_candidates = method_call_nodes.select { |node| macro_method_names.include?(node.children[1].to_s) }
+      @macro_method_candidates = candidates
     end
 
     class << self

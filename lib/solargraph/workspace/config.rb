@@ -119,6 +119,15 @@ module Solargraph
         raw_data['max_files']
       end
 
+      # How many parsed sources of files that are not open the language server
+      # keeps after it evicted them.
+      #
+      # @sg-ignore Need to validate config
+      # @return [Integer]
+      def source_cache_size
+        raw_data['source_cache_size']
+      end
+
       # @return [Hash{Symbol => Symbol}]
       def type_checker_rules
         # @type [Hash{String => String}]
@@ -186,7 +195,8 @@ module Solargraph
           },
           'require_paths' => [],
           'plugins' => [],
-          'max_files' => MAX_FILES
+          'max_files' => MAX_FILES,
+          'source_cache_size' => SourceCache::DEFAULT_SIZE
         }
       end
 

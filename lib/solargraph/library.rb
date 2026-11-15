@@ -25,9 +25,14 @@ module Solargraph
 
     # @param workspace [Solargraph::Workspace]
     # @param name [String, nil]
-    def initialize workspace = Solargraph::Workspace.new, name = nil
+    # @param evict_sources [Boolean] Drop the text and syntax tree of each
+    #   file that is not open once it is mapped. The language server evicts,
+    #   the command line keeps everything.
+    def initialize workspace = Solargraph::Workspace.new, name = nil, evict_sources: false
       @workspace = workspace
       @name = name
+      @evict_sources = evict_sources
+      SourceCache.instance.size = workspace.config.source_cache_size if evict_sources
       # @type [Integer, nil]
       @total = nil
       # @type [Source, nil]
@@ -68,7 +73,7 @@ module Solargraph
       changed = source && @current != source
       @current = source
       opened = source&.filename
-      @open_filenames.add opened if opened
+      open_file opened if opened
       maybe_map @current
       catalog if changed
     end
@@ -96,6 +101,7 @@ module Solargraph
     # @return [void]
     def open_file filename
       @open_filenames.add filename
+      SourceCache.instance.open filename if @evict_sources
     end
 
     # The files that are open in the editor.
@@ -162,6 +168,7 @@ module Solargraph
       filenames.each do |filename|
         detach filename
         source_map_hash.delete(filename)
+        SourceCache.instance.forget filename if @evict_sources
         result ||= workspace.remove(filename)
       end
       result
@@ -178,7 +185,15 @@ module Solargraph
 
       @open_filenames.delete filename
       @current = nil if attached?(filename)
-      return if workspace.has_file?(filename)
+      if workspace.has_file?(filename)
+        # The disk version is authoritative once the editor closes the file.
+        if @evict_sources
+          SourceCache.instance.close filename
+          create_from_disk filename
+          catalog
+        end
+        return
+      end
 
       forget_source_map filename
       catalog
@@ -288,9 +303,9 @@ module Solargraph
       files = if only
                 [api_map.source_map(filename)]
               else
-                (workspace.sources + (@current ? [@current] : []))
+                reference_sources
               end
-      files.uniq(&:filename).each do |source|
+      files.each do |source|
         found = source.references(pin.name)
         found.select! do |loc|
           referenced = definitions_at(loc.filename, loc.range.ending.line, loc.range.ending.character)&.first
@@ -512,13 +527,16 @@ module Solargraph
     # @return [SourceMap, Boolean]
     def next_map
       return false if mapped?
-      src = workspace.sources.find { |s| !source_map_hash.key?(s.filename) }
+      filename = workspace.filenames.find { |f| !source_map_hash.key?(f) }
+      return false if filename.nil?
+      src = workspace.source(filename)
       return false if src.nil?
-      Logging.logger.debug "Mapping #{src.filename}"
-      # @sg-ignore OK if src.filename is nil
-      mutex.synchronize { source_map_hash[src.filename] = Solargraph::SourceMap.map(src) }
-      # @sg-ignore OK if src.filename is nil
-      source_map_hash[src.filename]
+      Logging.logger.debug "Mapping #{filename}"
+      mutex.synchronize do
+        map = source_map_hash[filename] = Solargraph::SourceMap.map(src)
+        maybe_evict map
+        map
+      end
     end
 
     # @return [self]
@@ -535,6 +553,21 @@ module Solargraph
     # @return [Array<Solargraph::Pin::Base>]
     def pins
       @pins ||= []
+    end
+
+    # The workspace sources and the attached source, loaded one at a time so
+    # evicted sources do not all get parsed at once.
+    #
+    # @return [Enumerator<Source>]
+    def reference_sources
+      current = @current
+      Enumerator.new do |yielder|
+        workspace.filenames.each do |name|
+          found = workspace.source(name)
+          yielder << found if found
+        end
+        yielder << current if current && !workspace.has_file?(current.filename.to_s)
+      end
     end
 
     # @return [Set<String>]
@@ -597,7 +630,7 @@ module Solargraph
     def read filename
       return @current if @current && @current.filename == filename
       raise FileNotFoundError, "File not found: #{filename}" unless workspace.has_file?(filename)
-      workspace.source(filename)
+      workspace.source(filename) || raise(FileNotFoundError, "File changed on disk: #{filename}")
     end
 
     # @param filename [String]
@@ -617,6 +650,32 @@ module Solargraph
       return unless @current == source || workspace.has_file?(source.filename)
       # @sg-ignore OK if source.filename is nil
       source_map_hash[source.filename] = Solargraph::SourceMap.map(source)
+      # @sg-ignore OK if source.filename is nil
+      maybe_evict source_map_hash[source.filename]
+    end
+
+    # Evict the source of a mapped workspace file that is not open.
+    #
+    # @param source_map [SourceMap]
+    # @return [void]
+    def maybe_evict source_map
+      filename = source_map.filename
+      return unless @evict_sources && filename && workspace.has_file?(filename) && !open?(filename)
+      source_map.evict!
+      workspace.evict filename
+    end
+
+    # Map files again whose evicted source changed on disk, the way a change
+    # reported by the file watcher would.
+    #
+    # @return [void]
+    def remap_stale_sources
+      return unless @evict_sources
+      stale = SourceCache.instance.take_stale { |filename| contain?(filename) && !open?(filename) }
+      return if stale.empty?
+      logger.info "Mapping #{stale.length} changed file(s) again"
+      create_from_disk(*stale)
+      catalog
     end
 
     # @return [Set<Gem::Specification>]
@@ -708,6 +767,7 @@ module Solargraph
 
     # @return [void]
     def sync_catalog
+      remap_stale_sources
       return if @sync_count.zero?
 
       mutex.synchronize do
