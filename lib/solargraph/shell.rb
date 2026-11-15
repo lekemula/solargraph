@@ -300,7 +300,7 @@ module Solargraph
         end
       end
       # @sg-ignore Need to add nil check here
-      puts "Scanned #{directory} (#{api_map.pins.length} pins) in #{time.real} seconds."
+      puts "Scanned #{directory} (#{api_map.pin_count} pins) in #{time.real} seconds."
     end
 
     desc 'list', 'List the files in the workspace and the total count'

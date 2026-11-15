@@ -249,6 +249,11 @@ module Solargraph
       store.pins.clone.freeze
     end
 
+    # @return [Integer]
+    def pin_count
+      store.pin_count
+    end
+
     # An array of pins based on Ruby keywords (`if`, `end`, etc.).
     #
     # @return [Enumerable<Solargraph::Pin::Keyword>]
