@@ -140,7 +140,7 @@ module Solargraph
     def text filename
       stamp = @mutex.synchronize { @stamps[filename] unless @stale.include?(filename) }
       return nil if stamp.nil?
-      read(filename, stamp) || stale!(filename)
+      read_text(filename, stamp) || stale!(filename)
     end
 
     # Make a source available to node lookups while the block runs, without
@@ -160,6 +160,23 @@ module Solargraph
       ensure
         @mutex.synchronize { @lent.delete name }
       end
+    end
+
+    # The source of a registered file for a workspace-wide scan: the cached
+    # copy if there is one, otherwise parsed from disk without entering the
+    # cache, so a scan does not push out the sources inference needs.
+    #
+    # @param filename [String]
+    # @return [Source, nil] nil if the file is not registered, changed since
+    #   it was registered, or cannot be read
+    def read filename
+      stamp = @mutex.synchronize do
+        cached = @lent[filename] || @open_sources[filename] || @lru[filename]
+        return cached if cached
+        @stamps[filename] unless @stale.include?(filename)
+      end
+      return nil if stamp.nil?
+      load(filename, stamp) || stale!(filename)
     end
 
     # @param ref [NodeRef]
@@ -204,7 +221,7 @@ module Solargraph
     # @param stamp [Array(Time, Integer)]
     # @return [Source, nil]
     def load filename, stamp
-      code = read(filename, stamp)
+      code = read_text(filename, stamp)
       return nil if code.nil?
       source = Source.load_string(code, filename)
       source.node
@@ -214,7 +231,7 @@ module Solargraph
     # @param filename [String]
     # @param stamp [Array(Time, Integer)]
     # @return [String, nil]
-    def read filename, stamp
+    def read_text filename, stamp
       stat = File.stat(filename)
       return nil unless [stat.mtime, stat.size] == stamp
       code = File.read(filename)

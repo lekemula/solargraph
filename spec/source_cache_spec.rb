@@ -135,4 +135,21 @@ describe Solargraph::SourceCache do
     expect(cache.cached_filenames).to be_empty
     expect(cache.fetch(file)).not_to be(source)
   end
+
+  it 'reads a registered file past the LRU' do
+    files = %w[a b].map { |name| write_file("#{name}.rb", "class #{name.upcase}; end") }
+    files.each { |file| cache.register file }
+    cached = cache.fetch(files[0])
+    expect(cache.read(files[0])).to be(cached)
+    expect(cache.read(files[1]).node.type).to eq(:class)
+    expect(cache.cached_filenames).to eq([files[0]])
+  end
+
+  it 'reads nothing for a changed file and reports it stale' do
+    file = write_file('a.rb', 'class A; end')
+    cache.register file
+    File.write(file, 'class A; def foo; end; end')
+    expect(cache.read(file)).to be_nil
+    expect(cache.take_stale { true }).to eq([file])
+  end
 end
