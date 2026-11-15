@@ -11,12 +11,10 @@ module Solargraph
       # @param args [::Array<Parameter>]
       # @param [Hash{Symbol => Object}] splat
       def initialize receiver: nil, args: [], context: nil, node: nil, **splat
-        super(**splat, parameters: args)
+        super(**splat, parameters: args, context: context, return_type: ComplexType.parse('::Proc'), node: node,
+                       name: '<block>')
         @receiver = receiver
-        @context = context
-        @return_type = ComplexType.parse('::Proc')
-        @node = node
-        @name = '<block>'
+        @rebind = nil
       end
 
       # @sg-ignore nil once the source changed on disk after eviction

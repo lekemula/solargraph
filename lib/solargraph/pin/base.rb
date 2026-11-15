@@ -46,8 +46,10 @@ module Solargraph
       # @param docstring [YARD::Docstring, nil]
       # @param directives [::Array<YARD::Tags::Directive>, nil]
       # @param combine_priority [::Numeric, nil] See attr_reader for combine_priority
+      # @param return_type [ComplexType, nil]
+      # @param context [ComplexType, nil]
       def initialize location: nil, type_location: nil, closure: nil, source: nil, name: '', comments: '',
-                     docstring: nil, directives: nil, combine_priority: nil
+                     docstring: nil, directives: nil, combine_priority: nil, return_type: nil, context: nil
         @location = location
         @type_location = type_location
         @closure = closure
@@ -60,6 +62,28 @@ module Solargraph
         @combine_priority = combine_priority
         # @type [ComplexType, ComplexType::UniqueType, nil]
         @binder = nil
+        # Memory efficiency: every ivar that a reader memoizes later starts
+        # here, in one fixed order. Ruby (3.2+) gives each object a "shape",
+        # its ordered list of ivar names, and keeps the values inline in the
+        # object slot. Adding an ivar after initialize, or in a different
+        # order, branches the shape tree; once a class reaches 8 branches
+        # ("shape variations"), its objects that need a new shape fall back to
+        # a hash table of ivars: 1-2 KB per pin instead of a 320-byte slot.
+        # Subclasses assign their own memoized ivars the same way, and pass
+        # values for ivars assigned here up through super instead of
+        # assigning them again: Ruby sizes an object's slot from the ivars the
+        # initialize methods of its class chain assign, so assigning one twice
+        # can move a class to the next larger slot.
+        @return_type = return_type
+        @context = context
+        @path = nil
+        @macros = nil
+        @macro_names = nil
+        @proxied = false
+        @probed = false
+        @gates = nil
+        @completion_item = nil
+        @documentation = nil
 
         assert_source_provided
         assert_location_provided
@@ -203,9 +227,8 @@ module Solargraph
         # directly manipulates docstring without editing comments
         # (e.g., Api::Map::Store#index processes overrides that way
         #
-        # Same with @directives, @macros, @maybe_directives, which
+        # Same with @directives and @macros, which
         # regenerate docstring
-        @deprecated = nil
         @context = nil
         @binder = nil
         @path = nil
@@ -581,13 +604,13 @@ module Solargraph
       #
       # @return [Boolean]
       def maybe_directives?
-        return !@directives.empty? if defined?(@directives) && @directives
-        @maybe_directives ||= comments.include?('@!')
+        return !@directives.empty? if @directives
+        comments.include?('@!')
       end
 
       # @return [Boolean]
       def deprecated?
-        @deprecated ||= docstring.has_tag?('deprecated')
+        docstring.has_tag?('deprecated')
       end
 
       # Get a fully qualified type from the pin's return type.

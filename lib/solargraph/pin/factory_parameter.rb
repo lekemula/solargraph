@@ -56,6 +56,7 @@ module Solargraph
         @value = value
         @decl = decl
         @return_type = return_type
+        @method_path = nil
       end
 
       def name

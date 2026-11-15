@@ -47,6 +47,7 @@ module Solargraph
           @context = nil
         end
         @name = name
+        @full_context = nil
       end
 
       def reset_generated!

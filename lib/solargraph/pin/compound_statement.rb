@@ -47,6 +47,7 @@ module Solargraph
       def initialize node: nil, **splat
         super(**splat)
         @node = node
+        @end_position = nil
       end
 
       # @sg-ignore nil once the source changed on disk after eviction

@@ -30,15 +30,14 @@ module Solargraph
       # @param [Hash{Symbol => Object}] splat
       def initialize visibility: :public, explicit: true, block: :undefined, node: nil, attribute: false, signatures: nil, anon_splat: false,
                      context: nil, overloading: false, **splat
-        super(**splat)
+        super(**splat, block: block, node: node, context: context)
         @visibility = visibility
         @explicit = explicit
-        @block = block
-        @node = node
         @attribute = attribute
         @signatures = signatures
         @anon_splat = anon_splat
-        @context = context if context
+        @overloads = nil
+        @resolved_ref_tag = nil
         @overloading = overloading
       end
 
@@ -240,7 +239,7 @@ module Solargraph
 
       # @return [::Array<Hash>]
       def signature_help
-        @signature_help ||= signatures.map do |sig|
+        signatures.map do |sig|
           {
             label: "#{name}(#{sig.parameters.map(&:full).join(', ')})",
             documentation: documentation
@@ -455,7 +454,6 @@ module Solargraph
             source: :overloads
           )
         end
-        @overloads
       end
 
       def anon_splat?

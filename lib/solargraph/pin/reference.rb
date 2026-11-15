@@ -35,6 +35,7 @@ module Solargraph
       def initialize generic_values: [], **splat
         super(**splat)
         @generic_values = generic_values
+        @type = nil
       end
 
       # @return [ComplexType]

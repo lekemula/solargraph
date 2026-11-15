@@ -40,6 +40,10 @@ module Solargraph
             end
 
             matches.each do |pin|
+              # Pins without a visibility (blocks, symbols, variables) must not
+              # gain the ivar: it would change their object shape
+              next unless pin.instance_variable_defined?(:@visibility)
+
               # @todo Smelly instance variable access
               pin.instance_variable_set(:@visibility, kind)
             end

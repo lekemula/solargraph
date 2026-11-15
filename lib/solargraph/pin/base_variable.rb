@@ -56,16 +56,16 @@ module Solargraph
                      intersection_return_type: nil, exclude_return_type: nil,
                      type_assertion: nil,
                      **splat
-        super(**splat)
+        super(**splat, return_type: return_type)
         @type_assertion = type_assertion
         # @type [Array<Parser::AST::Node, NodeRef>]
         @assignments = (assignment.nil? ? [] : [assignment]) + assignments
         # @type [nil, ::Array(Parser::AST::Node, Integer)]
         @mass_assignment = mass_assignment
-        @return_type = return_type
         @intersection_return_type = intersection_return_type
         @exclude_return_type = exclude_return_type
         @presence = presence
+        @type_from_assertion = nil
       end
 
       # @param presence [Range]

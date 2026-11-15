@@ -97,6 +97,18 @@ module Solargraph
         @all_params = []
         @all_params.concat @key_types
         @all_params.concat @subtypes
+        # Memory efficiency: ivars memoized by readers start here so every
+        # type keeps one Ruby object shape and its ivars inline in the object
+        # slot (see Pin::Base#initialize)
+        @non_literal_name = nil
+        @tag = nil
+        @rooted_tag = nil
+        @duck_type = nil
+        @nil_type = nil
+        @tuple = nil
+        @namespace = nil
+        @substring = nil
+        @scope = nil
       end
 
       def implicit_union?
