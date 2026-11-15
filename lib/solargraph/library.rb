@@ -277,40 +277,40 @@ module Solargraph
       return [] unless pin
 
       result = []
-      # @type [Array<Source, SourceMap>]
-      files = if only
-                [api_map.source_map(filename)]
-              else
-                reference_sources
+      filenames = only ? [filename] : reference_filenames
+      filenames.each do |name|
+        source = reference_source(name, pin.name)
+        next unless source
+        # Hits are resolved against the source in hand instead of a copy
+        # loaded through the cache.
+        SourceCache.instance.lend(source) do
+          found = source.references(pin.name)
+          found.select! do |loc|
+            referenced_path(source, loc.range.ending) == pin.path
+          end
+          if pin.path == 'Class#new'
+            caller = cursor.chain.base.infer(api_map, clip.send(:closure), clip.locals).first
+            if caller.defined?
+              found.select! do |loc|
+                clip = mutex.synchronize { api_map.clip(Source::Cursor.new(source, loc.range.start)) }
+                other = clip.send(:cursor).chain.base.infer(api_map, clip.send(:closure), clip.locals).first
+                caller == other
               end
-      files.each do |source|
-        found = source.references(pin.name)
-        found.select! do |loc|
-          referenced = definitions_at(loc.filename, loc.range.ending.line, loc.range.ending.character)&.first
-          referenced&.path == pin.path
-        end
-        if pin.path == 'Class#new'
-          caller = cursor.chain.base.infer(api_map, clip.send(:closure), clip.locals).first
-          if caller.defined?
-            found.select! do |loc|
-              clip = api_map.clip_at(loc.filename, loc.range.start)
-              other = clip.send(:cursor).chain.base.infer(api_map, clip.send(:closure), clip.locals).first
-              caller == other
+            else
+              found.clear
             end
-          else
-            found.clear
           end
-        end
-        # HACK: for language clients that exclude special characters from the start of variable names
-        if strip && (match = cursor.word.match(/^[^a-z0-9_]+/i))
-          found.map! do |loc|
-            # @sg-ignore Unresolved call to []
-            Solargraph::Location.new(loc.filename, Solargraph::Range.from_to(loc.range.start.line, loc.range.start.column + match[0].length, loc.range.ending.line, loc.range.ending.column))
+          # HACK: for language clients that exclude special characters from the start of variable names
+          if strip && (match = cursor.word.match(/^[^a-z0-9_]+/i))
+            found.map! do |loc|
+              # @sg-ignore Unresolved call to []
+              Solargraph::Location.new(loc.filename, Solargraph::Range.from_to(loc.range.start.line, loc.range.start.column + match[0].length, loc.range.ending.line, loc.range.ending.column))
+            end
           end
+          result.concat(found.sort do |a, b|
+            a.range.start.line <=> b.range.start.line
+          end)
         end
-        result.concat(found.sort do |a, b|
-          a.range.start.line <=> b.range.start.line
-        end)
       end
       result.uniq
     end
@@ -533,27 +533,73 @@ module Solargraph
       @pins ||= []
     end
 
-    # The workspace sources and the attached source, loaded one at a time so
-    # evicted sources do not all get parsed at once.
-    #
-    # @return [Enumerator<Source>]
-    def reference_sources
-      current = @current
-      Enumerator.new do |yielder|
-        workspace.filenames.each do |name|
-          found = workspace.source(name)
-          yielder << found if found
-        end
-        yielder << current if current && !workspace.has_file?(current.filename.to_s)
-      end
-    end
-
     # @return [Set<String>]
     def external_requires
       @external_requires ||= source_map_external_require_hash.values.flatten.to_set
     end
 
     private
+
+    # The workspace files and the attached file.
+    #
+    # @return [Array<String>]
+    def reference_filenames
+      names = workspace.filenames
+      current = @current&.filename
+      return names if current.nil? || workspace.has_file?(current)
+      names + [current]
+    end
+
+    # The source to search a file for references to a name in, or nil if its
+    # text does not mention the name. An open file uses its text in the
+    # editor. The text of an evicted file is read from disk and only parsed
+    # if it mentions the name, past the source cache.
+    #
+    # @param filename [String]
+    # @param name [String]
+    # @return [Source, nil]
+    def reference_source filename, name
+      current = @current
+      source = if current&.filename == filename
+                 current
+               elsif workspace.evicted?(filename)
+                 SourceCache.instance.peek(filename) || (return streamed_source(filename, name))
+               else
+                 workspace.source(filename)
+               end
+      source if source && mentions?(source.code, name)
+    end
+
+    # @param filename [String]
+    # @param name [String]
+    # @return [Source, nil]
+    def streamed_source filename, name
+      code = SourceCache.instance.text(filename)
+      Source.load_string(code, filename) if code && mentions?(code, name)
+    end
+
+    # False if the text cannot hold a reference to the name. Names that do
+    # not appear verbatim at their call sites, like operators and `[]`, are
+    # never ruled out.
+    #
+    # @param code [String]
+    # @param name [String]
+    def mentions? code, name
+      word = name.chomp('=')
+      return true unless word.match?(/\A(?:@@|@|\$)?[[:alpha:]_][[:alnum:]_]*[?!]?\z/)
+      code.include?(word)
+    rescue EncodingError
+      true
+    end
+
+    # @param source [Source]
+    # @param position [Position]
+    # @return [String, nil]
+    def referenced_path source, position
+      definitions_in(source, position).first&.path
+    rescue FileNotFoundError
+      nil
+    end
 
     # @param source [Source]
     # @param position [Position]
