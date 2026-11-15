@@ -21,9 +21,14 @@ module Solargraph
         File.join CacheDir.gem_dir, "#{metagem.cache_name}.ser"
       end
 
+      # Once a workspace's RBS collection has combined the gem's pins, its own
+      # pins are released and later loads get the combined pins, e.g. the
+      # catalogs that map path gems.
+      #
+      # @return [Array<Pin::Base>]
       def load
-        return super if metagem.cacheable?
-        @@path_source_cache[metagem.full_path] ||= pins
+        return @@path_source_cache[metagem.full_path] ||= pins unless metagem.cacheable?
+        combined_pins || super
       end
 
       def pins
@@ -69,6 +74,13 @@ module Solargraph
       end
 
       private
+
+      # @return [Array<Pin::Base>, nil]
+      def combined_pins
+        prefix = "#{cache_file}|"
+        key = Collection.mem_cache.keys.find { |cached| cached.start_with?(prefix) }
+        Collection.mem_cache[key] if key
+      end
 
       # Caches written before the unreachable pins were dropped still hold them.
       #

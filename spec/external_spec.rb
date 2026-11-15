@@ -75,6 +75,12 @@ describe Solargraph::External do
         expect(Solargraph::Collection.mem_cache.keys).not_to include(cache_file)
       end
 
+      it 'loads the combined pins for the gem without caching its own again' do
+        pins = Solargraph::Collection::Gem.load(metagem)
+        expect(pins.map(&:source)).to include(:combined)
+        expect(Solargraph::Collection.mem_cache.keys).not_to include(cache_file)
+      end
+
       it 'reuses the combined pins for another workspace with the same collection' do
         other = described_class.new(directory, requires)
         pin = external.pins.find { |pin| pin.path == 'Addressable::URI.parse' }
