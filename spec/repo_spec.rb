@@ -19,6 +19,10 @@ describe Solargraph::Repo do
       meta = repo.find_by_path('backport/machine')
       expect(meta.name).to eq('backport')
     end
+
+    it 'has no direct gem names' do
+      expect(described_class.new(directory).direct_gem_names).to be_nil
+    end
   end
 
   context 'with a bundle' do
@@ -58,6 +62,10 @@ describe Solargraph::Repo do
       # nokogiri is a transitive dependency of reverse_markdown
       meta = repo.find_by_name('nokogiri')
       expect(meta.name).to eq('nokogiri')
+    end
+
+    it 'names the gems the Gemfile declares directly' do
+      expect(repo.direct_gem_names).to eq(Set['backport', 'gem-with-yard-macros', 'reverse_markdown'])
     end
 
     it 'skips unavailable gems' do
