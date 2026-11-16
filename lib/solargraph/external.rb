@@ -15,14 +15,17 @@ module Solargraph
 
     attr_reader :extra_gem_names
 
-    # @param directory [String]
+    # @param directory [String, nil]
     # @param requires [Array<String>]
     # @param extra_gem_names [Array<String>]
-    def initialize directory, requires, extra_gem_names = []
+    # @param direct_only [Boolean] Map only the gems the Gemfile declares
+    #   directly, plus the gems that requires and extra gem names resolve to
+    def initialize directory, requires, extra_gem_names = [], direct_only: false
       @repo = Repo.new(directory)
       @directory = directory
       @requires = requires
       @extra_gem_names = extra_gem_names
+      @direct_only = direct_only
       update!
     end
 
@@ -44,6 +47,17 @@ module Solargraph
 
     def unloaded_gems
       @unloaded_gems ||= Set.new
+    end
+
+    def direct_only?
+      @direct_only
+    end
+
+    # Transitive dependencies left out because only direct gems are mapped.
+    #
+    # @return [Set<Metagem>]
+    def skipped_gems
+      @skipped_gems ||= Set.new
     end
 
     def unfound_gem_names
@@ -82,6 +96,9 @@ module Solargraph
       load_requires
       load_gem_names
       # load_rbs_collection
+      return if skipped_gems.empty?
+
+      Solargraph.logger.info "Skipped #{skipped_gems.size} transitive gems that nothing requires"
     end
 
     def cache_changed?
@@ -100,7 +117,7 @@ module Solargraph
         else
           metagem = @repo.find_by_path(path)
           next unresolved_requires.push(path) unless metagem
-          process_gem metagem
+          process_gem metagem, required: true
         end
       end
 
@@ -113,7 +130,7 @@ module Solargraph
       extra_gem_names.uniq.each do |gem|
         metagem = @repo.find_by_name(gem)
         next unfound_gem_names.push(gem) unless metagem
-        process_gem metagem
+        process_gem metagem, required: true
       end
     end
 
@@ -135,11 +152,18 @@ module Solargraph
       unloaded_gems.clear
       loaded_stdlibs.clear
       unfound_gem_names.clear
+      skipped_gems.clear
     end
 
-    def process_gem metagem
+    # @param metagem [Metagem]
+    # @param required [Boolean] True if a require or an extra gem name asks
+    #   for the gem itself, as opposed to reaching it as a dependency
+    # @return [void]
+    def process_gem metagem, required: false
       return if loaded_gems.include?(metagem) || unloaded_gems.include?(metagem)
+      return skipped_gems.add(metagem) if skip?(metagem, required)
 
+      skipped_gems.delete(metagem)
       if metagem.cacheable? && !Collection::Gem.cached?(metagem)
         unloaded_gems.add metagem
       else
@@ -164,6 +188,15 @@ module Solargraph
       signatures = rbs_collection.signature_path(metagem)
       return Collection::Gem.load(metagem) unless signatures
       Collection::Gem.combine(metagem, signatures) { rbs_collection.load(metagem) }
+    end
+
+    # @param metagem [Metagem]
+    # @param required [Boolean]
+    def skip? metagem, required
+      return false if required || !@direct_only
+
+      direct = @repo.direct_gem_names
+      !direct.nil? && !direct.include?(metagem.name)
     end
 
     def load_dependencies parent

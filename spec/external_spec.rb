@@ -49,6 +49,47 @@ describe Solargraph::External do
       # nokogiri is a transitive dependency of reverse_markdown
       expect(external.loaded_gems.map(&:name)).to include('nokogiri')
     end
+
+    context 'with direct gems only' do
+      let(:external) { described_class.new(directory, requires, direct_only: true) }
+
+      it 'loads the gems the Gemfile declares' do
+        expect(external.loaded_gems.map(&:name)).to include('backport', 'gem-with-yard-macros', 'reverse_markdown')
+      end
+
+      it 'skips transitive dependencies' do
+        expect(external.loaded_gems.map(&:name)).not_to include('nokogiri')
+        expect(external.skipped_gems.map(&:name)).to include('nokogiri')
+      end
+
+      it 'keeps no pins of skipped gems' do
+        expect(external.pins.map(&:path)).not_to include('Nokogiri')
+      end
+
+      it 'loads a required transitive dependency' do
+        external = described_class.new(directory, requires + ['nokogiri'], direct_only: true)
+        expect(external.loaded_gems.map(&:name)).to include('nokogiri')
+        expect(external.skipped_gems.map(&:name)).not_to include('nokogiri')
+      end
+
+      it 'loads a transitive dependency named as an extra gem' do
+        external = described_class.new(directory, requires, ['nokogiri'], direct_only: true)
+        expect(external.loaded_gems.map(&:name)).to include('nokogiri')
+      end
+
+      it 'skips transitive dependencies of the default group with bundler/require' do
+        external = described_class.new(directory, ['bundler/require'], direct_only: true)
+        gem_names = external.loaded_gems.map(&:name)
+        expect(gem_names).to include('backport', 'gem-with-yard-macros', 'reverse_markdown')
+        expect(gem_names).not_to include('nokogiri')
+      end
+
+      it 'loads transitive dependencies without a bundle' do
+        external = described_class.new(File.join('spec', 'fixtures', 'external_required_gem'), ['reverse_markdown'],
+                                       direct_only: true)
+        expect(external.loaded_gems.map(&:name)).to include('nokogiri')
+      end
+    end
   end
 
   context 'with RBS collection' do

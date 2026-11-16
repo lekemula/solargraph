@@ -69,6 +69,15 @@ When editing code, a `require` call that references a gem will pull the document
 
 If your project automatically requires bundled gem with the `Bundler.require` statement, Solargraph will add all of the Gemfile's default dependencies to the map.
 
+By default Solargraph also maps every dependency of those gems, all the way down. In a large bundle most of these transitive dependencies are never used by your code but still cost memory. To map only the gems your Gemfile declares, set in `.solargraph.yml`:
+
+```yaml
+gems:
+  load: direct   # `all` (the default) maps every gem the requires reach, with its dependencies
+```
+
+A gem that a workspace file `require`s is mapped even when it is only a transitive dependency, and so are the gems that conventions and plugins ask for. Code that uses a skipped gem's classes without requiring it gets `undefined` types for them; require the gem, or ask a plugin to load it. Without a `Gemfile.lock`, Solargraph maps all gems.
+
 To ensure you have types for gems which contain neither RBS nor YARD
 information, use
 [gem\_rbs\_collection](https://github.com/ruby/gem_rbs_collection) to

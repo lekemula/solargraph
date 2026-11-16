@@ -11,6 +11,8 @@ module Solargraph
       # The workspace's .solargraph.yml can override this value.
       MAX_FILES = 5000
 
+      GEM_LOADING_MODES = %w[all direct].freeze
+
       # @return [String]
       attr_reader :directory
 
@@ -128,6 +130,22 @@ module Solargraph
         raw_data['source_cache_size']
       end
 
+      # Which gems to map: `all` maps every gem the workspace's requires
+      # reach, with all of their dependencies; `direct` maps only the gems
+      # the Gemfile declares itself. Gems that a workspace file, a convention
+      # or a plugin requires are mapped in both modes.
+      #
+      # @return [String] `all` or `direct`
+      def gem_loading
+        gems = raw_data['gems']
+        mode = gems.is_a?(Hash) ? gems['load'] : nil
+        return 'all' if mode.nil?
+        return mode if GEM_LOADING_MODES.include?(mode)
+
+        Solargraph.logger.warn "Unknown gems.load #{mode.inspect} in #{workspace_config_path}, loading all gems"
+        'all'
+      end
+
       # @return [Hash{Symbol => Symbol}]
       def type_checker_rules
         # @type [Hash{String => String}]
@@ -196,7 +214,8 @@ module Solargraph
           'require_paths' => [],
           'plugins' => [],
           'max_files' => MAX_FILES,
-          'source_cache_size' => SourceCache::DEFAULT_SIZE
+          'source_cache_size' => SourceCache::DEFAULT_SIZE,
+          'gems' => { 'load' => 'all' }
         }
       end
 
