@@ -76,7 +76,7 @@ gems:
   load: direct   # `all` (the default) maps every gem the requires reach, with its dependencies
 ```
 
-A gem that a workspace file `require`s is mapped even when it is only a transitive dependency, and so are the gems that conventions and plugins ask for. Code that uses a skipped gem's classes without requiring it gets `undefined` types for them; require the gem, or ask a plugin to load it. Without a `Gemfile.lock`, Solargraph maps all gems.
+A gem that a workspace file `require`s is mapped even when it is only a transitive dependency, and so are the gems that conventions and plugins ask for. A convention asks for gems by name in the `Environ` it returns, e.g. `Solargraph::Environ.new(gem_names: %w[activerecord actionpack])`; Solargraph uses these names only in `direct` mode. `requires:` takes require paths instead (`active_record`) and applies in both modes. Code that uses a skipped gem's classes without requiring it gets `undefined` types for them; require the gem, or ask a plugin to load it. Without a `Gemfile.lock`, Solargraph maps all gems.
 
 To ensure you have types for gems which contain neither RBS nor YARD
 information, use
