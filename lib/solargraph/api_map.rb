@@ -128,7 +128,12 @@ module Solargraph
     end
 
     def external
-      @external ||= External.new(workspace&.directory, [], direct_only: workspace&.config&.gem_loading == 'direct')
+      @external ||= begin
+        config = workspace&.config
+        External.new(workspace&.directory, [], direct_only: config&.gem_loading == 'direct',
+                                               included_gems: config&.gem_includes || [],
+                                               excluded_gems: config&.gem_excludes || [])
+      end
     end
 
     def unresolved_requires

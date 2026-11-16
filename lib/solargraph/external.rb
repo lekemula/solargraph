@@ -20,12 +20,18 @@ module Solargraph
     # @param extra_gem_names [Array<String>]
     # @param direct_only [Boolean] Map only the gems the Gemfile declares
     #   directly, plus the gems that requires and extra gem names resolve to
-    def initialize directory, requires, extra_gem_names = [], direct_only: false
+    # @param included_gems [Array<String>] Names of gems to map in every mode
+    # @param excluded_gems [Array<String>] Names of gems never to map, however
+    #   they are reached
+    def initialize directory, requires, extra_gem_names = [], direct_only: false, included_gems: [],
+                   excluded_gems: []
       @repo = Repo.new(directory)
       @directory = directory
       @requires = requires
       @extra_gem_names = extra_gem_names
       @direct_only = direct_only
+      @included_gem_names = included_gems
+      @excluded_gem_names = excluded_gems.to_set
       update!
     end
 
@@ -58,6 +64,13 @@ module Solargraph
     # @return [Set<Metagem>]
     def skipped_gems
       @skipped_gems ||= Set.new
+    end
+
+    # Gems left out because the configuration excludes them.
+    #
+    # @return [Set<Metagem>]
+    def excluded_gems
+      @excluded_gems ||= Set.new
     end
 
     def unfound_gem_names
@@ -95,8 +108,9 @@ module Solargraph
       clear_all
       load_requires
       load_gem_names
+      load_included_gems
       # load_rbs_collection
-      release_unused_gem_caches if direct_only?
+      release_unused_gem_caches if direct_only? || @excluded_gem_names.any?
       return if skipped_gems.empty?
 
       Solargraph.logger.info "Skipped #{skipped_gems.size} transitive gems that nothing requires"
@@ -135,6 +149,15 @@ module Solargraph
       end
     end
 
+    # @return [void]
+    def load_included_gems
+      @included_gem_names.uniq.each do |gem|
+        metagem = @repo.find_by_name(gem)
+        next unfound_gem_names.push(gem) unless metagem
+        process_gem metagem, required: true
+      end
+    end
+
     # Other ApiMaps in the process, such as the catalogs that map path gems,
     # can load gems this External leaves out. Their pins would stay in the
     # process-wide memo although nothing uses them.
@@ -167,6 +190,7 @@ module Solargraph
       loaded_stdlibs.clear
       unfound_gem_names.clear
       skipped_gems.clear
+      excluded_gems.clear
     end
 
     # @param metagem [Metagem]
@@ -175,6 +199,7 @@ module Solargraph
     # @return [void]
     def process_gem metagem, required: false
       return if loaded_gems.include?(metagem) || unloaded_gems.include?(metagem)
+      return excluded_gems.add(metagem) if @excluded_gem_names.include?(metagem.name)
       return skipped_gems.add(metagem) if skip?(metagem, required)
 
       skipped_gems.delete(metagem)

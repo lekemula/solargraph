@@ -73,4 +73,24 @@ describe Solargraph::Workspace::Config do
       expect(described_class.new(dir_path).gem_loading).to eq('all')
     end
   end
+
+  describe '#gem_includes and #gem_excludes' do
+    it 'are empty by default' do
+      config = described_class.new(dir_path)
+      expect(config.gem_includes).to eq([])
+      expect(config.gem_excludes).to eq([])
+    end
+
+    it 'read the gem names' do
+      File.write(File.join(dir_path, '.solargraph.yml'), "gems:\n  include: [nokogiri]\n  exclude: [twilio-ruby]\n")
+      config = described_class.new(dir_path)
+      expect(config.gem_includes).to eq(['nokogiri'])
+      expect(config.gem_excludes).to eq(['twilio-ruby'])
+    end
+
+    it 'ignore a value that is not a list' do
+      File.write(File.join(dir_path, '.solargraph.yml'), "gems:\n  exclude: twilio-ruby\n")
+      expect(described_class.new(dir_path).gem_excludes).to eq([])
+    end
+  end
 end
