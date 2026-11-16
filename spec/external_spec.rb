@@ -90,6 +90,23 @@ describe Solargraph::External do
         expect(external.loaded_gems.map(&:name)).to include('nokogiri')
       end
     end
+
+    context 'with gem caches other catalogs loaded' do
+      let(:nokogiri) { Solargraph::Metagem.from_specification(Gem::Specification.find_by_name('nokogiri')) }
+      let(:cache_file) { Solargraph::Collection::Gem.new(nokogiri).cache_file }
+
+      before { Solargraph::Collection::Gem.load(nokogiri) }
+
+      it 'releases the caches of gems it skips' do
+        described_class.new(directory, requires, direct_only: true)
+        expect(Solargraph::Collection.mem_cache.keys).not_to include(cache_file)
+      end
+
+      it 'keeps the caches when it maps all gems' do
+        described_class.new(directory, ['backport'])
+        expect(Solargraph::Collection.mem_cache.keys).to include(cache_file)
+      end
+    end
   end
 
   context 'with RBS collection' do

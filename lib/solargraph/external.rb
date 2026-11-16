@@ -96,6 +96,7 @@ module Solargraph
       load_requires
       load_gem_names
       # load_rbs_collection
+      release_unused_gem_caches if direct_only?
       return if skipped_gems.empty?
 
       Solargraph.logger.info "Skipped #{skipped_gems.size} transitive gems that nothing requires"
@@ -131,6 +132,19 @@ module Solargraph
         metagem = @repo.find_by_name(gem)
         next unfound_gem_names.push(gem) unless metagem
         process_gem metagem, required: true
+      end
+    end
+
+    # Other ApiMaps in the process, such as the catalogs that map path gems,
+    # can load gems this External leaves out. Their pins would stay in the
+    # process-wide memo although nothing uses them.
+    #
+    # @return [void]
+    def release_unused_gem_caches
+      used = loaded_gems.select(&:cacheable?).to_set { |metagem| Collection::Gem.new(metagem).cache_file }
+      gem_dir = "#{CacheDir.gem_dir}#{File::SEPARATOR}"
+      Collection.mem_cache.delete_if do |key, _|
+        key.start_with?(gem_dir) && !used.include?(key.split('|').first)
       end
     end
 
