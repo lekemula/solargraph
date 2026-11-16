@@ -20,7 +20,7 @@ describe Solargraph::External do
 
   context 'with cached sources' do
     before(:all) do # rubocop:disable RSpec/BeforeAfterAll
-      %w[backport reverse_markdown nokogiri].each do |name|
+      %w[backport reverse_markdown nokogiri racc].each do |name|
         metagem = Solargraph::Metagem.from_specification(Gem::Specification.find_by_name(name))
         Solargraph::Collection::Gem.load(metagem) unless Solargraph::Collection::Gem.cached?(metagem)
       end
@@ -128,6 +128,81 @@ describe Solargraph::External do
       it 'excludes a gem in direct mode' do
         external = described_class.new(directory, requires, direct_only: true, excluded_gems: ['backport'])
         expect(external.loaded_gems.map(&:name)).not_to include('backport')
+      end
+    end
+
+    context 'with skipped gems loaded on first reference' do
+      let(:external) { described_class.new(directory, requires, direct_only: true, lazy_load: 5) }
+
+      it 'loads a skipped gem on a reference to one of its namespaces' do
+        expect(external.lazy_load('Nokogiri::HTML::Document')).to be(true)
+        expect(external.lazy_gem_names).to eq(['nokogiri'])
+        expect(external.lazy_pins.map(&:path)).to include('Nokogiri::HTML::Document')
+      end
+
+      it 'loads a gem once' do
+        external.lazy_load('Nokogiri')
+        expect(external.lazy_load('Nokogiri::XML::Document#root')).to be(false)
+        expect(external.lazy_gem_names).to eq(['nokogiri'])
+      end
+
+      it 'ignores paths that no skipped gem owns' do
+        expect(external.lazy_load('Backport::Server')).to be(false)
+        expect(external.lazy_load('String#upcase')).to be(false)
+        expect(external.lazy_gem_names).to be_empty
+      end
+
+      it 'loads a dependency of a skipped gem' do
+        expect(external.lazy_load('Racc::Parser')).to be(true)
+        expect(external.lazy_gem_names).to eq(['racc'])
+      end
+
+      it 'evicts the least recently used gem past its limit' do
+        external = described_class.new(directory, requires, direct_only: true, lazy_load: 1)
+        external.lazy_load('Nokogiri')
+        external.lazy_load('Racc::Parser')
+        expect(external.lazy_gem_names).to eq(['racc'])
+        expect(external.lazy_pins.map(&:path)).not_to include('Nokogiri')
+      end
+
+      it 'reloads an evicted gem' do
+        external = described_class.new(directory, requires, direct_only: true, lazy_load: 1)
+        external.lazy_load('Nokogiri')
+        external.lazy_load('Racc::Parser')
+        expect(external.lazy_load('Nokogiri')).to be(true)
+        expect(external.lazy_gem_names).to eq(['nokogiri'])
+      end
+
+      it 'keeps a gem in use over an older one' do
+        external = described_class.new(directory, requires, direct_only: true, lazy_load: 2)
+        external.lazy_load('Nokogiri')
+        external.lazy_load('Racc::Parser')
+        external.lazy_load('Nokogiri::XML')
+        expect(external.lazy_gem_names).to eq(%w[racc nokogiri])
+      end
+
+      it 'never loads an excluded gem' do
+        external = described_class.new(directory, requires, direct_only: true, excluded_gems: ['nokogiri'],
+                                                            lazy_load: 5)
+        expect(external.lazy_load('Nokogiri')).to be(false)
+      end
+
+      it 'loads nothing for a skipped gem without a cache' do
+        allow(Solargraph::Collection::Gem).to receive(:cached?).and_call_original
+        allow(Solargraph::Collection::Gem).to receive(:cached?).with(having_attributes(name: 'nokogiri'))
+                                                               .and_return(false)
+        expect(external.lazy_load('Nokogiri')).to be(false)
+      end
+
+      it 'loads nothing lazily with a limit of 0' do
+        external = described_class.new(directory, requires, direct_only: true, lazy_load: 0)
+        expect(external.lazy_load('Nokogiri')).to be(false)
+      end
+
+      it 'loads nothing lazily when all gems are mapped' do
+        external = described_class.new(directory, requires, lazy_load: 5)
+        expect(external.lazy_load('Nokogiri')).to be(false)
+        expect(external.lazy_pins).to be_empty
       end
     end
 

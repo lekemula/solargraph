@@ -13,6 +13,8 @@ module Solargraph
 
       GEM_LOADING_MODES = %w[all direct].freeze
 
+      DEFAULT_GEM_LAZY_LOAD = 50
+
       # @return [String]
       attr_reader :directory
 
@@ -162,6 +164,19 @@ module Solargraph
         gem_names_at('exclude')
       end
 
+      # How many gems that `direct` skips may load when code first refers to
+      # them, and stay loaded, least recently used first out. 0 turns it off.
+      #
+      # @return [Integer]
+      def gem_lazy_load
+        gems = raw_data['gems']
+        limit = gems.is_a?(Hash) ? gems.fetch('lazy_load', DEFAULT_GEM_LAZY_LOAD) : DEFAULT_GEM_LAZY_LOAD
+        return limit if limit.is_a?(Integer) && !limit.negative?
+
+        Solargraph.logger.warn "gems.lazy_load in #{workspace_config_path} is not a count, loading no gems lazily"
+        0
+      end
+
       # @return [Hash{Symbol => Symbol}]
       def type_checker_rules
         # @type [Hash{String => String}]
@@ -243,7 +258,7 @@ module Solargraph
           'plugins' => [],
           'max_files' => MAX_FILES,
           'source_cache_size' => SourceCache::DEFAULT_SIZE,
-          'gems' => { 'load' => 'all', 'include' => [], 'exclude' => [] }
+          'gems' => { 'load' => 'all', 'include' => [], 'exclude' => [], 'lazy_load' => DEFAULT_GEM_LAZY_LOAD }
         }
       end
 

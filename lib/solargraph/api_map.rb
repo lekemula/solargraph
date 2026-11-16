@@ -121,7 +121,9 @@ module Solargraph
       gem_names = addon.gem_names
       gem_names += conventions_environ.gem_names if external.direct_only?
       external_changed = external.update(bench.external_requires.to_a + conventions_environ.requires, gem_names)
-      store_changed = store.update(@@core_pins, external.pins.clone, conventions_environ.pins, addon.pins, iced_pins, live_pins) { process_macros }
+      store.demand = method(:demand_gem) if external.direct_only?
+      store_changed = store.update(@@core_pins, external.pins.clone, conventions_environ.pins, addon.pins, iced_pins,
+                                   external.lazy_pins, live_pins) { process_macros }
       @cache.clear if external_changed || store_changed
       Solargraph.logger.info "Cataloging ApiMap finished in #{Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time} seconds"
       self
@@ -132,8 +134,24 @@ module Solargraph
         config = workspace&.config
         External.new(workspace&.directory, [], direct_only: config&.gem_loading == 'direct',
                                                included_gems: config&.gem_includes || [],
-                                               excluded_gems: config&.gem_excludes || [])
+                                               excluded_gems: config&.gem_excludes || [],
+                                               lazy_load: config&.gem_lazy_load || 0)
       end
+    end
+
+    # The store layer that holds the pins of skipped gems loaded on first
+    # reference.
+    LAZY_GEMS_LAYER = 5
+
+    # Load the skipped gem that owns a path the store is about to read.
+    #
+    # @param path [String]
+    # @return [void]
+    def demand_gem path
+      return unless external.lazy_load(path)
+
+      store.update_layer(LAZY_GEMS_LAYER, external.lazy_pins)
+      cache.clear
     end
 
     def unresolved_requires
@@ -1078,7 +1096,7 @@ module Solargraph
       # External is compared by identity and generation instead of by its pins:
       # Chain#infer hashes the ApiMap on every inference, and Array#hash would
       # walk every gem pin on each of those calls.
-      [@source_map_hash, conventions_environ, @external, @external&.generation,
+      [@source_map_hash, conventions_environ, @external, @external&.generation, @external&.lazy_generation,
        @unresolved_requires, @loose_unions]
     end
   end

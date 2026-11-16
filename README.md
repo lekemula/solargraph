@@ -78,9 +78,10 @@ gems:
     - mail
   exclude:       # gems never to map, however they are reached, e.g. a large generated API client
     - twilio-ruby
+  lazy_load: 50  # how many skipped gems may load when your code first refers to them (0 turns it off)
 ```
 
-A gem that a workspace file `require`s is mapped even when it is only a transitive dependency, and so are the gems that conventions and plugins ask for. A convention asks for gems by name in the `Environ` it returns, e.g. `Solargraph::Environ.new(gem_names: %w[activerecord actionpack])`; Solargraph uses these names only in `direct` mode. `requires:` takes require paths instead (`active_record`) and applies in both modes. Code that uses a skipped gem's classes without requiring it gets `undefined` types for them; require the gem, or ask a plugin to load it. Without a `Gemfile.lock`, Solargraph maps all gems. `include` also maps a bundled gem that nothing requires when all gems are mapped. `exclude` wins over everything else: requires, plugins and `include`; an excluded gem gets `undefined` types.
+A gem that a workspace file `require`s is mapped even when it is only a transitive dependency, and so are the gems that conventions and plugins ask for. A convention asks for gems by name in the `Environ` it returns, e.g. `Solargraph::Environ.new(gem_names: %w[activerecord actionpack])`; Solargraph uses these names only in `direct` mode. `requires:` takes require paths instead (`active_record`) and applies in both modes. When your code refers to a skipped gem, e.g. a constant under one of its namespaces or a method on one of its classes, Solargraph loads that gem's pins on first reference. Up to `lazy_load` such gems stay loaded; past that the least recently used one is dropped and loads again when it is needed. The gems the Gemfile declares, the required ones and `include` are never dropped. Without a `Gemfile.lock`, Solargraph maps all gems. `include` also maps a bundled gem that nothing requires when all gems are mapped. `exclude` wins over everything else: requires, plugins and `include`; an excluded gem gets `undefined` types.
 
 To ensure you have types for gems which contain neither RBS nor YARD
 information, use
