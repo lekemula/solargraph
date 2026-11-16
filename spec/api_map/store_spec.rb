@@ -164,4 +164,43 @@ describe Solargraph::ApiMap::Store do
       expect(ObjectSpace.memsize_of(store.fqns_pins('Bar'))).to be < 1_000
     end
   end
+
+  describe '#demand' do
+    let(:foo_pin) { Solargraph::Pin::Namespace.new(name: 'Foo') }
+
+    it 'is asked for a path before a lookup reads it' do
+      store = described_class.new([foo_pin])
+      asked = []
+      store.demand = ->(path) { asked.push path }
+      store.get_path_pins('Foo')
+      store.get_methods('Bar')
+      expect(asked).to eq(%w[Foo Bar])
+    end
+
+    it 'is not asked while the store updates' do
+      store = described_class.new([foo_pin], [])
+      asked = []
+      store.demand = ->(path) { asked.push path }
+      store.update([foo_pin], [Solargraph::Pin::Namespace.new(name: 'Bar')]) do
+        store.get_path_pins('Foo')
+        []
+      end
+      expect(asked).to be_empty
+    end
+  end
+
+  describe '#update_layer' do
+    it 'replaces one pinset and keeps the pins of the last update block' do
+      foo_pin = Solargraph::Pin::Namespace.new(name: 'Foo')
+      bar_pin = Solargraph::Pin::Namespace.new(name: 'Bar')
+      baz_pin = Solargraph::Pin::Namespace.new(name: 'Baz')
+      top_pin = Solargraph::Pin::Namespace.new(name: 'Top')
+      store = described_class.new
+      store.update([foo_pin], [bar_pin], []) { [top_pin] }
+      store.update_layer(1, [baz_pin])
+      expect(store.get_path_pins('Bar')).to be_empty
+      expect(store.get_path_pins('Baz')).to eq([baz_pin])
+      expect(store.get_path_pins('Top')).to eq([top_pin])
+    end
+  end
 end
