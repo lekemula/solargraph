@@ -19,6 +19,9 @@ module Solargraph
       @unmapped = []
       @reached = Thread::Queue.new
       @release = Thread::Queue.new
+      # Loads the message classes now, as a running server has them loaded
+      # before its first request.
+      @definition_class = LanguageServer::Message.select('textDocument/definition')
     end
 
     # Prepare a library for the directory and return once its files are
@@ -54,7 +57,7 @@ module Solargraph
     # @param column [Integer] zero-based
     # @return [Array<Hash>, Hash, nil] the response's result
     def definition uri, line, column
-      message = LanguageServer::Message::TextDocument::Definition.new(
+      message = @definition_class.new(
         @host, {
           'params' => {
             'textDocument' => { 'uri' => uri },
