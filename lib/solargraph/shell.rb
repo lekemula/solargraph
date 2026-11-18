@@ -532,10 +532,12 @@ module Solargraph
 
     # @param path [String]
     # @param hooks [Array<Symbol>]
-    # @return [Float] wall time in seconds
+    # @return [Float] wall time in seconds, without writing the profile
     def profile_phase path, hooks, &block
+      time = 0.0
       # @sg-ignore vernier is an optional dependency loaded by #profile
-      measure { Vernier.profile(out: path, hooks: hooks, &block) }
+      Vernier.profile(out: path, hooks: hooks) { time = measure(&block) }
+      time
     end
 
     # @return [Float] wall time in seconds
