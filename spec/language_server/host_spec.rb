@@ -150,6 +150,30 @@ describe Solargraph::LanguageServer::Host do
     expect(output).to include(%("kind":"end"))
   end
 
+  it 'reports the catalog of a mapped workspace before it starts' do
+    Dir.mktmpdir do |dir|
+      File.write File.join(dir, 'a.rb'), "class A; end\n"
+      File.write File.join(dir, 'b.rb'), "class B; end\n"
+      host = described_class.new
+      host.client_capabilities = { 'window' => { 'workDoneProgress' => true } }
+      library = Solargraph::Library.load(dir)
+      before_catalog = nil
+      allow(library).to receive(:catalog).and_wrap_original do |original|
+        before_catalog ||= host.flush
+        original.call
+      end
+
+      host.send :sync_library_map, library
+      after_catalog = host.flush
+
+      expect(library).to have_received(:catalog).once
+      expect(before_catalog).to include('Cataloging workspace (2/2 files)')
+      expect(before_catalog).to include('"percentage":100')
+      expect(before_catalog).not_to include('"kind":"end"')
+      expect(after_catalog).to include('"kind":"end"')
+    end
+  end
+
   it "sends a library's progress to the client" do
     host = described_class.new
     host.client_capabilities = { 'window' => { 'workDoneProgress' => true } }

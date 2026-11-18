@@ -502,6 +502,10 @@ module Solargraph
       (workspace.filenames - source_map_hash.keys).empty?
     end
 
+    # Mapping the last file catalogs the workspace. The block, if given, runs
+    # right before that catalog starts.
+    #
+    # @yieldparam [SourceMap] the last file's map
     # @return [SourceMap, Boolean]
     def next_map
       return false if mapped?
@@ -517,6 +521,7 @@ module Solargraph
       end
       # Requests made while mapping synced only the files mapped so far
       if mapped?
+        yield map if block_given?
         catalog
         sync_catalog
       end
