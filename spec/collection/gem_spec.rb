@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'open3'
 require 'tmpdir'
 
 describe Solargraph::Collection::Gem do
@@ -136,6 +137,50 @@ describe Solargraph::Collection::Gem do
     FileUtils.mkdir_p File.dirname(described_class.new(metagem).cache_file)
     File.binwrite described_class.new(metagem).cache_file, Marshal.dump(pins)
     expect(described_class.load(metagem).map(&:path)).to include('NodeFree::Thing#initialize')
+  end
+
+  describe 'mapping a path gem' do
+    let(:path_gem) do
+      Solargraph::Metagem.new(name: 'node_free', full_path: @gem_dir, spec_file: nil,
+                              source: 'source at node_free', version: '1.0.0',
+                              require_paths: ['lib'], dependencies: [])
+    end
+
+    # A bundled workspace, so a default Workspace and Repo would scan it
+    let(:workspace) do
+      dir = File.join(File.dirname(@gem_dir), 'workspace')
+      FileUtils.mkdir_p dir
+      File.write File.join(dir, 'Gemfile'), "source 'https://rubygems.org'\n"
+      File.write File.join(dir, 'Gemfile.lock'), ''
+      File.write File.join(dir, 'app.rb'), "class App; end\n"
+      dir
+    end
+
+    # @param pins [Array<Solargraph::Pin::Base>]
+    def summary pins
+      pins.map { |pin| [pin.class, pin.path, pin.return_type.to_s, pin.location&.range&.to_hash] }
+    end
+
+    it 'does not spawn a bundle subprocess' do
+      allow(Open3).to receive(:capture3).and_call_original
+      Dir.chdir(workspace) { described_class.load(path_gem) }
+      expect(Open3).not_to have_received(:capture3)
+    end
+
+    it 'does not glob the workspace' do
+      allow(Dir).to receive(:[]).and_call_original
+      Dir.chdir(workspace) { described_class.load(path_gem) }
+      expect(Dir).not_to have_received(:[])
+    end
+
+    it 'maps the pins a catalog with the default workspace maps, macros included' do
+      file = File.join(@gem_dir, 'lib', 'node_free.rb')
+      bench = Solargraph::Bench.new(source_maps: [Solargraph::SourceMap.load(file)])
+      cataloged = Solargraph::ApiMap.new.catalog(bench).pins.select { |pin| pin.filename == file }
+      pins = described_class.load(path_gem)
+      expect(pins.map(&:path)).to include('NodeFree::Thing#ready?')
+      expect(summary(pins)).to eq(summary(described_class.reachable(cataloged)))
+    end
   end
 
   describe 'pins nothing reaches' do

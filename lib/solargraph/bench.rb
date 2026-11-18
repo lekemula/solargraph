@@ -7,7 +7,7 @@ module Solargraph
     # @return [Set<SourceMap>]
     attr_reader :source_maps
 
-    # @return [Workspace]
+    # @return [Workspace, nil]
     attr_reader :workspace
 
     # @return [SourceMap]
@@ -17,14 +17,14 @@ module Solargraph
     attr_reader :external_requires
 
     # @param source_maps [Array<SourceMap>, Set<SourceMap>]
-    # @param workspace [Workspace]
+    # @param workspace [Workspace, nil]
     # @param live_map [SourceMap, nil]
     # @param external_requires [Array<String>, Set<String>]
     def initialize source_maps: [], workspace: Workspace.new, live_map: nil, external_requires: []
       @source_maps = source_maps.to_set
       @workspace = workspace
       @live_map = live_map
-      @external_requires = external_requires.reject { |path| workspace.would_require?(path) }
+      @external_requires = external_requires.reject { |path| workspace&.would_require?(path) }
                                             .compact
                                             .to_set
     end

@@ -102,9 +102,12 @@ module Solargraph
         files = metagem.require_paths.flat_map { |path| Dir.glob(File.join(metagem.full_path, path, '**', '*.rb')) }
         source_maps = files.map { |file| Solargraph::SourceMap.load(file) }
 
-        # Generating an ApiMap is necessary for processing macros
-        bench = Bench.new(source_maps: source_maps)
-        source_pins = ApiMap.new.catalog(bench).pins.select { |pin| files.include?(pin.filename) }
+        # Generating an ApiMap is necessary for processing macros. It maps no
+        # workspace and no gems.
+        # @sg-ignore Workspace, nil and NilClass do not unify
+        bench = Bench.new(source_maps: source_maps, workspace: nil)
+        api_map = ApiMap.new(external: External::None.new)
+        source_pins = api_map.catalog(bench).pins.select { |pin| files.include?(pin.filename) }
         # After the catalog, whose macro expansion reads the nodes
         source_pins = Gem.reachable(source_pins)
         detach_nodes source_pins

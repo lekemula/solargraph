@@ -7,6 +7,23 @@ module Solargraph
   #   bundle or dependency updates
   #
   class External
+    # An External that maps no gems, whatever a catalog requires. Catalogs
+    # that only need the core and their own sources use it, e.g. the ones
+    # that expand the macros of a path gem.
+    class None < External
+      def initialize
+        # @sg-ignore String, nil and NilClass do not unify
+        super(nil, [])
+      end
+
+      # @param _new_requires [Array<String>]
+      # @param _new_gem_names [Array<String>]
+      # @return [Boolean]
+      def update _new_requires, _new_gem_names = []
+        false
+      end
+    end
+
     # What the lazy index needs to know about a gem, without keeping its pins.
     class LazySummary
       # @return [Hash{String => Integer}] the namespaces the gem defines, with
