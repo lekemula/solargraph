@@ -61,6 +61,17 @@ module Solargraph
     end
     alias bundle? bundled?
 
+    # Names of the gems the directory's Gemfile declares itself, as opposed to
+    # gems that are only dependencies of other gems. Nil if the directory has
+    # no bundle definition.
+    #
+    # @return [Set<String>, nil]
+    def direct_gem_names
+      return @direct_gem_names if defined?(@direct_gem_names)
+
+      @direct_gem_names = in_process_direct_gem_names
+    end
+
     # Metagems from the directory's bundle definition, or an empty array if a
     # bundle definition does not exist.
     #
@@ -101,6 +112,7 @@ module Solargraph
       Solargraph.logger.warn "Failed to load gems from bundle at #{directory}: #{e}"
       @metagems = nil
       @bundled_group_map = {}
+      @direct_gem_names = nil
       nil
     end
 
@@ -112,6 +124,7 @@ module Solargraph
         [group, Bundler.definition.specs_for([group]).map(&:name)]
       end
       @bundled_group_map = groups.transform_values { |names| names.map { |name| bundled_metagem_name_map[name] } }
+      @direct_gem_names = Bundler.definition.dependencies.select(&:should_include?).to_set(&:name)
     end
 
     def build_from_gemfile_lock
@@ -132,6 +145,9 @@ module Solargraph
       @bundled_group_map = {
         default: parser.dependencies.filter_map { |name, _dep| bundled_metagem_name_map[name] }
       }
+      # The lockfile lists every dependency the Gemfile declares, whatever its
+      # group or platform.
+      @direct_gem_names = parser.dependencies.keys.to_set
     end
 
     # Build a metagem from a locked specification.
@@ -343,6 +359,19 @@ module Solargraph
       value&.to_s
     rescue StandardError => e
       Solargraph.logger.warn "Failed to read #{file}: #{e}"
+      nil
+    end
+
+    # When Solargraph runs inside the directory's bundle, the bundle is
+    # already loaded in this process.
+    #
+    # @return [Set<String>, nil]
+    def in_process_direct_gem_names
+      return unless bundled_directory? && ENV['BUNDLE_GEMFILE'] == gemfile
+
+      Bundler.definition.dependencies.select(&:should_include?).to_set(&:name)
+    rescue StandardError => e
+      Solargraph.logger.warn "Failed to read the direct dependencies of #{directory}: #{e.message}"
       nil
     end
 

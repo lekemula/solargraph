@@ -11,6 +11,8 @@ module Solargraph
       # The workspace's .solargraph.yml can override this value.
       MAX_FILES = 5000
 
+      GEM_LOADING_MODES = %w[all direct].freeze
+
       # @return [String]
       attr_reader :directory
 
@@ -128,6 +130,38 @@ module Solargraph
         raw_data['source_cache_size']
       end
 
+      # Which gems to map: `all` maps every gem the workspace's requires
+      # reach, with all of their dependencies; `direct` maps only the gems
+      # the Gemfile declares itself. Gems that a workspace file, a convention
+      # or a plugin requires are mapped in both modes.
+      #
+      # @return [String] `all` or `direct`
+      def gem_loading
+        gems = raw_data['gems']
+        mode = gems.is_a?(Hash) ? gems['load'] : nil
+        return 'all' if mode.nil?
+        return mode if GEM_LOADING_MODES.include?(mode)
+
+        Solargraph.logger.warn "Unknown gems.load #{mode.inspect} in #{workspace_config_path}, loading all gems"
+        'all'
+      end
+
+      # Names of gems to map in every gem loading mode, e.g. a transitive
+      # dependency that `direct` would skip.
+      #
+      # @return [Array<String>]
+      def gem_includes
+        gem_names_at('include')
+      end
+
+      # Names of gems never to map, however they are reached. Exclusion wins
+      # over requires, plugins and `gem_includes`.
+      #
+      # @return [Array<String>]
+      def gem_excludes
+        gem_names_at('exclude')
+      end
+
       # @return [Hash{Symbol => Symbol}]
       def type_checker_rules
         # @type [Hash{String => String}]
@@ -174,6 +208,18 @@ module Solargraph
         YAML.safe_load_file(config_path)
       end
 
+      # @param key [String]
+      # @return [Array<String>]
+      def gem_names_at key
+        gems = raw_data['gems']
+        names = gems.is_a?(Hash) ? gems[key] : nil
+        return [] if names.nil?
+        return names.map(&:to_s) if names.is_a?(Array)
+
+        Solargraph.logger.warn "gems.#{key} in #{workspace_config_path} is not a list of gem names, ignoring it"
+        []
+      end
+
       # @return [Hash{String => Array, Hash, Integer}]
       def default_config
         {
@@ -196,7 +242,8 @@ module Solargraph
           'require_paths' => [],
           'plugins' => [],
           'max_files' => MAX_FILES,
-          'source_cache_size' => SourceCache::DEFAULT_SIZE
+          'source_cache_size' => SourceCache::DEFAULT_SIZE,
+          'gems' => { 'load' => 'all', 'include' => [], 'exclude' => [] }
         }
       end
 

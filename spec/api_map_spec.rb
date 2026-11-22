@@ -302,6 +302,23 @@ describe Solargraph::ApiMap do
     expect(@api_map.get_path_pins('Bar')).not_to be_empty
   end
 
+  it 'maps only direct gems when the workspace config asks for it' do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, '.solargraph.yml'), "gems:\n  load: direct\n")
+      api_map = described_class.new
+      api_map.catalog Solargraph::Bench.new(workspace: Solargraph::Workspace.new(dir))
+      expect(api_map.external).to be_direct_only
+    end
+  end
+
+  it 'maps all gems by default' do
+    Dir.mktmpdir do |dir|
+      api_map = described_class.new
+      api_map.catalog Solargraph::Bench.new(workspace: Solargraph::Workspace.new(dir))
+      expect(api_map.external).not_to be_direct_only
+    end
+  end
+
   it 'checks attribute visibility' do
     source = Solargraph::Source.load_string(%(
       class Foo

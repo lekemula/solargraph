@@ -200,7 +200,8 @@ describe Solargraph::Library do
   it 'diagnoses using all reporters' do
     directory = ''
     config = instance_double(Solargraph::Workspace::Config)
-    allow(config).to receive_messages(plugins: [], required: [], reporters: ['all!'])
+    allow(config).to receive_messages(plugins: [], required: [], reporters: ['all!'], gem_loading: 'all',
+                                      gem_includes: [], gem_excludes: [])
     workspace = Solargraph::Workspace.new directory, config
     library = described_class.new workspace
     src = Solargraph::Source.load_string(%(

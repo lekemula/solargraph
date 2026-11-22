@@ -49,6 +49,109 @@ describe Solargraph::External do
       # nokogiri is a transitive dependency of reverse_markdown
       expect(external.loaded_gems.map(&:name)).to include('nokogiri')
     end
+
+    context 'with direct gems only' do
+      let(:external) { described_class.new(directory, requires, direct_only: true) }
+
+      it 'loads the gems the Gemfile declares' do
+        expect(external.loaded_gems.map(&:name)).to include('backport', 'gem-with-yard-macros', 'reverse_markdown')
+      end
+
+      it 'skips transitive dependencies' do
+        expect(external.loaded_gems.map(&:name)).not_to include('nokogiri')
+        expect(external.skipped_gems.map(&:name)).to include('nokogiri')
+      end
+
+      it 'keeps no pins of skipped gems' do
+        expect(external.pins.map(&:path)).not_to include('Nokogiri')
+      end
+
+      it 'loads a required transitive dependency' do
+        external = described_class.new(directory, requires + ['nokogiri'], direct_only: true)
+        expect(external.loaded_gems.map(&:name)).to include('nokogiri')
+        expect(external.skipped_gems.map(&:name)).not_to include('nokogiri')
+      end
+
+      it 'loads a transitive dependency named as an extra gem' do
+        external = described_class.new(directory, requires, ['nokogiri'], direct_only: true)
+        expect(external.loaded_gems.map(&:name)).to include('nokogiri')
+      end
+
+      it 'skips transitive dependencies of the default group with bundler/require' do
+        external = described_class.new(directory, ['bundler/require'], direct_only: true)
+        gem_names = external.loaded_gems.map(&:name)
+        expect(gem_names).to include('backport', 'gem-with-yard-macros', 'reverse_markdown')
+        expect(gem_names).not_to include('nokogiri')
+      end
+
+      it 'loads transitive dependencies without a bundle' do
+        external = described_class.new(File.join('spec', 'fixtures', 'external_required_gem'), ['reverse_markdown'],
+                                       direct_only: true)
+        expect(external.loaded_gems.map(&:name)).to include('nokogiri')
+      end
+
+      it 'loads an included transitive dependency' do
+        external = described_class.new(directory, requires, direct_only: true, included_gems: ['nokogiri'])
+        expect(external.loaded_gems.map(&:name)).to include('nokogiri')
+      end
+    end
+
+    context 'with excluded gems' do
+      it 'skips an excluded transitive dependency' do
+        external = described_class.new(directory, requires, excluded_gems: ['nokogiri'])
+        expect(external.loaded_gems.map(&:name)).not_to include('nokogiri')
+        expect(external.excluded_gems.map(&:name)).to include('nokogiri')
+      end
+
+      it 'skips an excluded direct gem with its pins' do
+        external = described_class.new(directory, requires, excluded_gems: ['backport'])
+        expect(external.loaded_gems.map(&:name)).not_to include('backport')
+        expect(external.pins.map(&:path)).not_to include('Backport')
+      end
+
+      it 'excludes a gem that a require resolves to' do
+        external = described_class.new(directory, requires + ['nokogiri'], excluded_gems: ['nokogiri'])
+        expect(external.loaded_gems.map(&:name)).not_to include('nokogiri')
+      end
+
+      it 'excludes a gem named as an extra gem' do
+        external = described_class.new(directory, requires, ['nokogiri'], excluded_gems: ['nokogiri'])
+        expect(external.loaded_gems.map(&:name)).not_to include('nokogiri')
+      end
+
+      it 'excludes an included gem' do
+        external = described_class.new(directory, requires, direct_only: true, included_gems: ['nokogiri'],
+                                                            excluded_gems: ['nokogiri'])
+        expect(external.loaded_gems.map(&:name)).not_to include('nokogiri')
+      end
+
+      it 'excludes a gem in direct mode' do
+        external = described_class.new(directory, requires, direct_only: true, excluded_gems: ['backport'])
+        expect(external.loaded_gems.map(&:name)).not_to include('backport')
+      end
+    end
+
+    context 'with gem caches other catalogs loaded' do
+      let(:nokogiri) { Solargraph::Metagem.from_specification(Gem::Specification.find_by_name('nokogiri')) }
+      let(:cache_file) { Solargraph::Collection::Gem.new(nokogiri).cache_file }
+
+      before { Solargraph::Collection::Gem.load(nokogiri) }
+
+      it 'releases the caches of gems it skips' do
+        described_class.new(directory, requires, direct_only: true)
+        expect(Solargraph::Collection.mem_cache.keys).not_to include(cache_file)
+      end
+
+      it 'releases the caches of gems it excludes' do
+        described_class.new(directory, requires, excluded_gems: ['nokogiri'])
+        expect(Solargraph::Collection.mem_cache.keys).not_to include(cache_file)
+      end
+
+      it 'keeps the caches when it maps all gems' do
+        described_class.new(directory, ['backport'])
+        expect(Solargraph::Collection.mem_cache.keys).to include(cache_file)
+      end
+    end
   end
 
   context 'with RBS collection' do

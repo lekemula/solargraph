@@ -1,6 +1,43 @@
 # frozen_string_literal: true
 
+require 'tmpdir'
+
 describe Solargraph::Convention do
+  context 'with gem names in a global environ' do
+    let(:convention) do
+      Class.new(Solargraph::Convention::Base) do
+        def global _doc_map
+          Solargraph::Environ.new(gem_names: ['backport'])
+        end
+      end
+    end
+
+    before { described_class.register convention }
+
+    after { described_class.unregister convention }
+
+    # @param gems_config [String] the gems key of a .solargraph.yml
+    # @return [Solargraph::ApiMap]
+    def catalog_workspace gems_config
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, '.solargraph.yml'), gems_config)
+        api_map = Solargraph::ApiMap.new
+        api_map.catalog Solargraph::Bench.new(workspace: Solargraph::Workspace.new(dir))
+        api_map
+      end
+    end
+
+    it 'passes them to the external gems when mapping direct gems only' do
+      api_map = catalog_workspace("gems:\n  load: direct\n")
+      expect(api_map.external.extra_gem_names).to include('backport')
+    end
+
+    it 'ignores them when mapping all gems' do
+      api_map = catalog_workspace("gems:\n  load: all\n")
+      expect(api_map.external.extra_gem_names).not_to include('backport')
+    end
+  end
+
   it 'newly defined pins are resolved by ApiMap after file changes' do
     filename = 'test.rb'
 
