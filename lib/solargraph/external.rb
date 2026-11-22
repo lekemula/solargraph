@@ -7,6 +7,49 @@ module Solargraph
   #   bundle or dependency updates
   #
   class External
+    # What the lazy index needs to know about a gem, without keeping its pins.
+    class LazySummary
+      # @return [Hash{String => Integer}] the namespaces the gem defines, with
+      #   how many method and constant pins each holds
+      attr_reader :namespaces
+
+      # @return [Array<String>]
+      attr_reader :constants
+
+      # @param pins [Array<Pin::Base>]
+      def initialize pins
+        defined = pins.grep(Pin::Namespace).to_set(&:path)
+        # @type [Hash{String, nil => Integer}]
+        counts = Hash.new(0)
+        pins.each { |pin| counts[pin.namespace] += 1 if External.owning_pin?(pin) }
+        @namespaces = defined.to_h { |path| [path, counts[path]] }
+        @constants = pins.grep(Pin::Constant).map(&:path)
+      end
+    end
+
+    class << self
+      # Kept per cache file for the process, so a new update does not reload
+      # every skipped gem.
+      #
+      # @param metagem [Metagem]
+      # @return [LazySummary]
+      def lazy_summary metagem
+        key = Collection::Gem.new(metagem).cache_file
+        lazy_summaries[key] ||= LazySummary.new(Collection::Gem.load(metagem))
+      end
+
+      # @return [Hash{String => LazySummary}]
+      def lazy_summaries
+        @lazy_summaries ||= {}
+      end
+
+      # @param pin [Pin::Base]
+      # @return [Boolean]
+      def owning_pin? pin
+        pin.is_a?(Pin::Method) || pin.is_a?(Pin::Constant)
+      end
+    end
+
     # @return [String]
     attr_reader :directory
 
@@ -23,8 +66,10 @@ module Solargraph
     # @param included_gems [Array<String>] Names of gems to map in every mode
     # @param excluded_gems [Array<String>] Names of gems never to map, however
     #   they are reached
+    # @param lazy_load [Integer] How many skipped gems may load on first
+    #   reference and stay loaded, least recently used first out
     def initialize directory, requires, extra_gem_names = [], direct_only: false, included_gems: [],
-                   excluded_gems: []
+                   excluded_gems: [], lazy_load: 0
       @repo = Repo.new(directory)
       @directory = directory
       @requires = requires
@@ -32,6 +77,7 @@ module Solargraph
       @direct_only = direct_only
       @included_gem_names = included_gems
       @excluded_gem_names = excluded_gems.to_set
+      @lazy_limit = lazy_load
       update!
     end
 
@@ -90,6 +136,49 @@ module Solargraph
       @generation ||= 0
     end
 
+    # The pins of skipped gems that loaded on first reference.
+    #
+    # @return [Array<Pin::Base>]
+    def lazy_pins
+      @lazy_pins ||= []
+    end
+
+    # @return [Integer] incremented whenever lazy_pins changes
+    def lazy_generation
+      @lazy_generation ||= 0
+    end
+
+    # Names of the skipped gems that loaded on first reference, least
+    # recently used first.
+    #
+    # @return [Array<String>]
+    def lazy_gem_names
+      lazy_ticks.sort_by(&:last).map(&:first)
+    end
+
+    # Load the skipped gem that owns a namespace or constant path, or mark it
+    # as recently used if it is loaded already.
+    #
+    # @param path [String] A namespace, constant or method path
+    # @return [Boolean] True if lazy_pins changed
+    def lazy_load path
+      return false if lazy_index.empty?
+
+      metagem = lazy_gem_for(path)
+      return false unless metagem
+
+      @lazy_tick = (@lazy_tick || 0) + 1
+      lazy_ticks[metagem.name] = @lazy_tick
+      return false if lazy_gems.key?(metagem.name)
+
+      lazy_gems[metagem.name] = [metagem, gem_pins(metagem)]
+      evict_lazy_gems
+      @lazy_pins = lazy_gems.values.flat_map(&:last)
+      @lazy_generation = lazy_generation + 1
+      Solargraph.logger.info "Loaded skipped gem #{metagem.name} on first reference to #{path}"
+      true
+    end
+
     # @param new_requires [Array<String>]
     # @return [Boolean]
     def update new_requires, new_gem_names = []
@@ -110,6 +199,7 @@ module Solargraph
       load_gem_names
       load_included_gems
       # load_rbs_collection
+      build_lazy_index
       release_unused_gem_caches if direct_only? || @excluded_gem_names.any?
       return if skipped_gems.empty?
 
@@ -164,10 +254,115 @@ module Solargraph
     #
     # @return [void]
     def release_unused_gem_caches
-      used = loaded_gems.select(&:cacheable?).to_set { |metagem| Collection::Gem.new(metagem).cache_file }
+      used_gems = loaded_gems.to_a + lazy_gems.values.map(&:first)
+      used = used_gems.select(&:cacheable?).to_set { |metagem| Collection::Gem.new(metagem).cache_file }
       gem_dir = "#{CacheDir.gem_dir}#{File::SEPARATOR}"
       Collection.mem_cache.delete_if do |key, _|
         key.start_with?(gem_dir) && !used.include?(key.split('|').first)
+      end
+    end
+
+    # @return [Hash{String => Array(Metagem, Array<Pin::Base>)}] by gem name
+    def lazy_gems
+      @lazy_gems ||= {}
+    end
+
+    # @return [Hash{String => Integer}] when each lazily loaded gem was last
+    #   referred to
+    def lazy_ticks
+      @lazy_ticks ||= {}
+    end
+
+    # @return [Hash{String => Metagem}] the skipped gem that owns each path
+    def lazy_index
+      @lazy_index ||= {}
+    end
+
+    # @param path [String]
+    # @return [Metagem, nil]
+    def lazy_gem_for path
+      key = path.delete_prefix('::').split(/[#.]/, 2).first
+      return if key.nil?
+
+      lazy_index[key] || lazy_index[key.split('::', 2).first]
+    end
+
+    # Index the namespaces and constants that a skipped gem owns: a namespace
+    # that only skipped gems define, or whose methods and constants come mostly
+    # from that gem rather than from the mapped pins. Gems that only add
+    # methods to a namespace of another gem or of the core do not load on its
+    # lookups.
+    #
+    # @return [void]
+    def build_lazy_index
+      @lazy_index = {}
+      @lazy_gems = {}
+      @lazy_ticks = {}
+      @lazy_pins = []
+      @lazy_generation = lazy_generation + 1
+      candidates = lazy_candidates.select { |metagem| Collection::Gem.cached?(metagem) }
+      return if @lazy_limit <= 0 || candidates.empty?
+
+      # @type [Array<Pin::Base>]
+      mapped = Collection::Core.load + pins
+      # @type [Hash{String, nil => Integer}]
+      resident = Hash.new(0)
+      mapped.each { |pin| resident[pin.namespace] += 1 if External.owning_pin?(pin) }
+      resident_paths = mapped.select { |pin| pin.is_a?(Pin::Namespace) || pin.is_a?(Pin::Constant) }.to_set(&:path)
+      best = {}
+      candidates.each do |metagem|
+        External.lazy_summary(metagem).namespaces.each do |path, count|
+          next if resident_paths.include?(path) && resident.fetch(path, 0) >= count
+          next if best[path] && best[path][1] >= count
+
+          best[path] = [metagem, count]
+        end
+      end
+      best.each { |path, (metagem, _)| @lazy_index[path] = metagem }
+      candidates.each do |metagem|
+        External.lazy_summary(metagem).constants.each do |path|
+          @lazy_index[path] ||= metagem unless resident_paths.include?(path)
+        end
+      end
+    end
+
+    # The skipped gems and the dependencies they bring, which were never
+    # visited because their parent was skipped. Excluded gems are left out.
+    #
+    # @return [Array<Metagem>]
+    def lazy_candidates
+      seen = (loaded_gems.to_a + unloaded_gems.to_a + excluded_gems.to_a).to_set(&:name)
+      # @type [Array<Metagem>]
+      result = []
+      # @type [Array<Metagem>]
+      queue = skipped_gems.to_a
+      # each also visits the dependencies pushed while it runs
+      queue.each do |metagem|
+        next if seen.include?(metagem.name) || @excluded_gem_names.include?(metagem.name)
+
+        seen.add metagem.name
+        result.push metagem
+        metagem.dependencies.each do |name|
+          dependency = @repo.find_by_name(name)
+          queue.push dependency if dependency
+        end
+      end
+      result
+    end
+
+    # @return [void]
+    def evict_lazy_gems
+      while lazy_gems.size > @lazy_limit
+        name = lazy_ticks.min_by(&:last)&.first
+        break unless name
+
+        lazy_ticks.delete(name)
+        metagem = lazy_gems.delete(name)&.first
+        next unless metagem
+
+        cache_file = Collection::Gem.new(metagem).cache_file
+        Collection.mem_cache.delete_if { |key, _| key == cache_file || key.start_with?("#{cache_file}|") }
+        Solargraph.logger.info "Evicted skipped gem #{name}"
       end
     end
 

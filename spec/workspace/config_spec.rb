@@ -93,4 +93,20 @@ describe Solargraph::Workspace::Config do
       expect(described_class.new(dir_path).gem_excludes).to eq([])
     end
   end
+
+  describe '#gem_lazy_load' do
+    it 'allows 50 lazily loaded gems by default' do
+      expect(described_class.new(dir_path).gem_lazy_load).to eq(50)
+    end
+
+    it 'reads the limit' do
+      File.write(File.join(dir_path, '.solargraph.yml'), "gems:\n  lazy_load: 3\n")
+      expect(described_class.new(dir_path).gem_lazy_load).to eq(3)
+    end
+
+    it 'loads nothing lazily for a value that is not a count' do
+      File.write(File.join(dir_path, '.solargraph.yml'), "gems:\n  lazy_load: many\n")
+      expect(described_class.new(dir_path).gem_lazy_load).to eq(0)
+    end
+  end
 end

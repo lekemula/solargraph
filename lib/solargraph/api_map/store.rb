@@ -6,6 +6,13 @@ module Solargraph
     # core.
     #
     class Store
+      # Called with a namespace, constant or method path before a lookup reads
+      # it, so pins that load on first reference can join the store in time.
+      # Not called while the store updates.
+      #
+      # @return [Method, nil]
+      attr_accessor :demand
+
       # @param pinsets [Array<Enumerable<Pin::Base>>]
       def initialize *pinsets
         @pinsets = pinsets
@@ -28,9 +35,11 @@ module Solargraph
       #   - pinsets[2] = convention pins
       #   - pinsets[3] = plugin addon pins
       #   - pinsets[4] = workspace source pins (aka. "iced_pins")
-      #   - pinsets[5] = currently open file pins
+      #   - pinsets[5] = pins of skipped gems loaded on first reference
+      #   - pinsets[6] = currently open file pins
       # @return [Boolean] True if the index was updated
       def update(*pinsets, &)
+        @updating = true
         return catalog(pinsets, &) if pinsets.length != @pinsets.length
 
         changed = pinsets.find_index.with_index { |pinset, idx| @pinsets[idx] != pinset }
@@ -53,6 +62,21 @@ module Solargraph
         constants.clear
         cached_qualify_superclass.clear
         true
+      ensure
+        @updating = false
+      end
+
+      # Replace one pinset and rebuild the layers above it. The pins the last
+      # update's block added stay on top.
+      #
+      # @param idx [Integer]
+      # @param pins [Array<Pin::Base>]
+      # @return [Boolean] True if the index was updated
+      def update_layer idx, pins
+        pinsets = @pinsets.dup
+        pinsets[idx] = pins
+        top_pins = @top_pins || []
+        update(*pinsets) { top_pins }
       end
 
       def to_s
@@ -94,6 +118,7 @@ module Solargraph
         return nil if fqns.nil? || fqns.empty?
         return BOOLEAN_SUPERCLASS_PIN if %w[TrueClass FalseClass].include?(fqns)
 
+        wanted fqns
         superclass_references[fqns].first || try_special_superclasses(fqns)
       end
 
@@ -113,30 +138,35 @@ module Solargraph
       # @param fqns [String]
       # @return [Array<Pin::Reference::Include>]
       def get_includes fqns
+        wanted fqns
         include_references[fqns] || []
       end
 
       # @param fqns [String]
       # @return [Array<Pin::Reference::Prepend>]
       def get_prepends fqns
+        wanted fqns
         prepend_references[fqns] || []
       end
 
       # @param fqns [String]
       # @return [Array<Pin::Reference::Extend>]
       def get_extends fqns
+        wanted fqns
         extend_references[fqns] || []
       end
 
       # @param fqns [String]
       # @return [Array<Pin::Reference::IncludedMixin>]
       def get_included_mixins fqns
+        wanted fqns
         index.included_mixin_references[fqns] || []
       end
 
       # @param path [String]
       # @return [Array<Solargraph::Pin::Base>]
       def get_path_pins path
+        wanted path
         index.path_pin_hash[path]
       end
 
@@ -207,6 +237,7 @@ module Solargraph
       # @return [Array<Solargraph::Pin::Namespace>]
       def fqns_pins fqns
         return [] if fqns.nil?
+        wanted fqns
         if fqns.include?('::')
           parts = fqns.split('::')
           name = parts.pop
@@ -331,7 +362,20 @@ module Solargraph
       def top_layer
         base = @indexes.last || Index.new
         @index = base.merge([])
-        @index = base.merge(yield) if block_given?
+        @top_pins = []
+        return unless block_given?
+
+        @top_pins = yield
+        @index = base.merge(@top_pins)
+      end
+
+      # @param path [String, nil]
+      # @return [void]
+      def wanted path
+        callable = demand
+        return if callable.nil? || @updating || path.nil? || path.empty?
+
+        callable.call(path)
       end
 
       # @return [Hash{::Array(String, String) => ::Array<Pin::Namespace>}]
@@ -380,6 +424,7 @@ module Solargraph
       # @param name [String]
       # @return [Enumerable<Solargraph::Pin::Base>]
       def namespace_children name
+        wanted name
         index.namespace_hash[name]
       end
 

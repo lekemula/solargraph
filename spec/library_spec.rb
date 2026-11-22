@@ -201,7 +201,7 @@ describe Solargraph::Library do
     directory = ''
     config = instance_double(Solargraph::Workspace::Config)
     allow(config).to receive_messages(plugins: [], required: [], reporters: ['all!'], gem_loading: 'all',
-                                      gem_includes: [], gem_excludes: [])
+                                      gem_includes: [], gem_excludes: [], gem_lazy_load: 0)
     workspace = Solargraph::Workspace.new directory, config
     library = described_class.new workspace
     src = Solargraph::Source.load_string(%(

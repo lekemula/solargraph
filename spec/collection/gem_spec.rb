@@ -187,7 +187,7 @@ describe Solargraph::Collection::Gem do
     let(:api_map) do
       gem_pins = described_class.load(metagem)
       external = instance_double(Solargraph::External, update: true, pins: gem_pins, configured_gem_names: [],
-                                                       direct_only?: false)
+                                                       direct_only?: false, lazy_pins: [], lazy_generation: 0)
       api_map = Solargraph::ApiMap.new
       allow(api_map).to receive(:external).and_return(external)
       api_map.map(source)
