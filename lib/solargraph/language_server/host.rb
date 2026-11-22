@@ -889,7 +889,12 @@ module Solargraph
         begin
           progress.begin "0/#{total} files", 0
           progress.send self
-          while library.next_map
+          cataloging = proc do
+            count = library.workspace.filenames.length
+            progress.report "Cataloging workspace (#{count}/#{count} files)", 100
+            progress.send self
+          end
+          while library.next_map(&cataloging)
             mapped = library.source_map_hash.length
             # The workspace can change while it's being mapped, e.g., when the
             # user opens a file that wasn't included in the original scan. The
