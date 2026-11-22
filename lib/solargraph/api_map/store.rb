@@ -337,11 +337,13 @@ module Solargraph
       # @return [Hash{::Array(String, String) => ::Array<Pin::Namespace>}]
       def fqns_pins_map
         # @param h [Hash{::Array(String, String) => ::Array<Pin::Namespace>}]
-        # @param base [String]
-        # @param name [String]
-        @fqns_pins_map ||= Hash.new do |h, (base, name)|
-          value = namespace_children(base).select { |pin| pin.name == name && pin.is_a?(Pin::Namespace) }
-          h[[base, name]] = value
+        # @param key [::Array(String, String)]
+        @fqns_pins_map ||= Hash.new do |h, key|
+          base, name = key
+          path = base.empty? ? name : "#{base}::#{name}"
+          # Not #select, whose result takes the capacity of its source: the
+          # root path alone has tens of thousands of pins.
+          h[key] = index.path_pin_hash[path].grep(Pin::Namespace).select { |pin| pin.namespace == base }
         end
       end
 
