@@ -20,7 +20,7 @@ module Solargraph
     # @raise [FileNotFoundError] if the evicted file changed or cannot be read
     # @return [Source]
     def source
-      resident = @source
+      resident = @source || @scanned_source
       return resident if resident
       name = @filename
       loaded = SourceCache.instance.fetch(name) if name
@@ -82,6 +82,7 @@ module Solargraph
     end
 
     def calls *method_names
+      return [] unless calls_any?(method_names.map(&:to_s))
       symbolized = method_names.map(&:to_sym)
       node_map.find_by_type(:send).select { |node| node.children[0].nil? && symbolized.include?(node.children[1].to_sym) }
               .map { |node| Call.new(self, Parser.chain(node), locate_namespace_pin(node.loc.line, node.loc.column)) }
@@ -110,6 +111,7 @@ module Solargraph
     def evict!
       name = filename
       return if evicted? || name.nil?
+      call_names
       SourceCache.instance.register name
       (all_pins + locals).each { |pin| pin.detach_nodes!(reload_from: name) }
       document_symbols
@@ -118,6 +120,48 @@ module Solargraph
       @method_call_nodes = nil
       @macro_method_names = nil
       @macro_method_candidates = nil
+    end
+
+    # Names of the methods the file calls without a receiver. They are kept
+    # after eviction, so a workspace-wide scan for calls parses only the
+    # files that make one.
+    #
+    # @return [Array<String>]
+    def call_names
+      @call_names ||= begin
+        root = source.node
+        root ? collect_call_names(root, Set.new).to_a.freeze : []
+      end
+    rescue FileNotFoundError
+      []
+    end
+
+    # True if the file calls one of the methods without a receiver.
+    #
+    # @param names [Enumerable<String>]
+    def calls_any? names
+      call_names.any? { |name| names.include?(name) }
+    end
+
+    # Run a workspace-wide scan on the file's source. The source of an
+    # evicted file is read past the SourceCache's LRU, serves #source while
+    # the block runs and is dropped afterwards.
+    #
+    # @generic T
+    # @yieldreturn [generic<T>]
+    # @return [generic<T>, nil] nil if the evicted file changed on disk
+    def scan_source
+      return yield if @source || @scanned_source
+      name = filename
+      return nil if name.nil?
+      loaded = SourceCache.instance.read(name)
+      return nil unless loaded
+      begin
+        @scanned_source = loaded
+        yield
+      ensure
+        @scanned_source = nil
+      end
     end
 
     # @return [Environ]
@@ -206,7 +250,7 @@ module Solargraph
     end
 
     # @sg-ignore flow sensitive typing needs to handle && in modifiers
-    # @param macro_method_names [Set<String>]
+    # @param macro_method_names [Enumerable<String>]
     # @return [Array<Parser::AST::Node>]
     def macro_method_candidates macro_method_names
       cached = @macro_method_candidates
@@ -247,6 +291,17 @@ module Solargraph
     end
 
     private
+
+    # @param node [::Parser::AST::Node]
+    # @param names [Set<String>]
+    # @return [Set<String>]
+    def collect_call_names node, names
+      # @sg-ignore A send node's second child is the method name Symbol
+      names.add node.children[1].name if node.type == :send && node.children[0].nil?
+      # @sg-ignore Node children are untyped
+      node.children.each { |child| collect_call_names(child, names) if child.is_a?(::Parser::AST::Node) }
+      names
+    end
 
     # @return [Hash{Class, Pin::Base => Array<Pin::Base>}]
     def pin_class_hash

@@ -4,6 +4,10 @@ module Solargraph
   module Plugin
     class ActiveSupport < Base
       ATTRIBUTE_NAME = /\A[_A-Za-z]\w*\z/
+      ATTRIBUTE_CALLS = %w[
+        class_attribute mattr_accessor cattr_accessor mattr_reader cattr_reader mattr_writer cattr_writer
+        config_accessor
+      ].freeze
 
       def addon
         return EMPTY_ADDON unless gem_names.include?('activesupport')
@@ -19,14 +23,30 @@ module Solargraph
         end
       end
 
+      # @sg-ignore source_maps is delegated to the untyped Panel
+      # @return [Array<Pin::Method>]
       def attribute_pins
-        source_maps.flat_map { |map| map.calls(:class_attribute, :mattr_accessor, :cattr_accessor, :mattr_reader, :cattr_reader, :mattr_writer, :cattr_writer, :config_accessor) }
-                   .select { |call| call.closure.is_a?(Pin::Namespace) }
-                   .flat_map { |call| generate_call_pins(call) }
-                   .compact
+        source_maps.flat_map { |map| scanned_attribute_pins(map) }
+      end
+
+      # @param map [SourceMap]
+      # @return [Array<Pin::Method>]
+      def scanned_attribute_pins map
+        return [] unless map.calls_any?(ATTRIBUTE_CALLS)
+        map.scan_source { attribute_pins_from(map) } || []
+      end
+
+      # @param map [SourceMap]
+      # @return [Array<Pin::Method>]
+      def attribute_pins_from map
+        map.calls(*ATTRIBUTE_CALLS)
+           .select { |call| call.closure.is_a?(Pin::Namespace) }
+           .flat_map { |call| generate_call_pins(call) }
+           .compact
       end
 
       # @param call [SourceMap::Call]
+      # @return [Array<Pin::Method>]
       def generate_call_pins call
         options = option_hash(call.chain.links.last.arguments.last)
         method_names = call.chain.links.last.arguments.select(&:literal?).map { |arg| arg.links.last.value }.compact
@@ -79,6 +99,7 @@ module Solargraph
       # @param name [String]
       # @param class_suffixes [Array<String>]
       # @param instance_suffixes [Array<String>]
+      # @return [Array<Pin::Method>]
       def method_pins name, class_suffixes, instance_suffixes, call
         comments = call.source_map.source.comments_for(call.chain.node)
         location = Solargraph::Location.new(call.closure.filename, Solargraph::Range.from_node(call.chain.node))
