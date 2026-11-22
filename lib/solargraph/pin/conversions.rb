@@ -51,15 +51,13 @@ module Solargraph
 
       # @return [Hash]
       def resolve_completion_item
-        @resolve_completion_item ||= begin
-          extra = {}
-          alldoc = ''
-          # alldoc += link_documentation unless link_documentation.nil?
-          # alldoc += "\n\n" unless alldoc.empty?
-          alldoc += documentation unless documentation.nil?
-          extra[:documentation] = alldoc unless alldoc.empty?
-          completion_item.merge(extra)
-        end
+        extra = {}
+        alldoc = ''
+        # alldoc += link_documentation unless link_documentation.nil?
+        # alldoc += "\n\n" unless alldoc.empty?
+        alldoc += documentation unless documentation.nil?
+        extra[:documentation] = alldoc unless alldoc.empty?
+        completion_item.merge(extra)
       end
 
       # @return [::Array<Hash>]
@@ -88,7 +86,7 @@ module Solargraph
       #
       # @return [String, nil]
       def link_documentation
-        @link_documentation ||= generate_link
+        generate_link
       end
 
       # @return [String, nil]
@@ -101,10 +99,6 @@ module Solargraph
       # @return [void]
       def reset_conversions
         @completion_item = nil
-        @resolve_completion_item = nil
-        @signature_help = nil
-        @detail = nil
-        @link_documentation = nil
       end
 
       private

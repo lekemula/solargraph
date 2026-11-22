@@ -30,15 +30,14 @@ module Solargraph
       # @param [Hash{Symbol => Object}] splat
       def initialize visibility: :public, explicit: true, block: :undefined, node: nil, attribute: false, signatures: nil, anon_splat: false,
                      context: nil, overloading: false, **splat
-        super(**splat)
+        super(**splat, block: block, node: node, context: context)
         @visibility = visibility
         @explicit = explicit
-        @block = block
-        @node = node
         @attribute = attribute
         @signatures = signatures
         @anon_splat = anon_splat
-        @context = context if context
+        @overloads = nil
+        @resolved_ref_tag = nil
         @overloading = overloading
       end
 
@@ -240,7 +239,7 @@ module Solargraph
 
       # @return [::Array<Hash>]
       def signature_help
-        @signature_help ||= signatures.map do |sig|
+        signatures.map do |sig|
           {
             label: "#{name}(#{sig.parameters.map(&:full).join(', ')})",
             documentation: documentation
@@ -433,7 +432,7 @@ module Solargraph
         # tag's source is likely malformed.
 
         # @param tag [YARD::Tags::OverloadTag]
-        @overloads ||= docstring.tags(:overload).select(&:parameters).map do |tag|
+        @overloads ||= Empty.share_array(docstring.tags(:overload).select(&:parameters).map do |tag|
           Pin::Signature.new(
             generics: generics,
             # @param src [Array(String, String)]
@@ -454,8 +453,7 @@ module Solargraph
             return_type: ComplexType.try_parse(*tag.docstring.tags(:return).flat_map(&:types)),
             source: :overloads
           )
-        end
-        @overloads
+        end)
       end
 
       def anon_splat?
@@ -493,7 +491,8 @@ module Solargraph
 
       protected
 
-      attr_writer :block, :signature_help, :documentation, :return_type
+      # @sg-ignore return_type= infers Boolean among its types
+      attr_writer :block, :documentation, :return_type
 
       def dodgy_visibility_source?
         # as of 2025-03-12, the RBS generator used for

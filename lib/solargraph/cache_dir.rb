@@ -5,6 +5,12 @@ require 'rbs'
 
 module Solargraph
   module CacheDir
+    # Bumped when cached pins change layout, so that caches an older layout
+    # wrote are rebuilt instead of loaded. Version 2: pins assign every
+    # memoized ivar in #initialize; pins in the older ivar orders would push
+    # the pin classes past Ruby's shape variation limit.
+    PIN_CACHE_FORMAT = 2
+
     module_function
 
     # The base directory for cached YARD documentation and serialized pins.
@@ -20,7 +26,7 @@ module Solargraph
     #
     # @return [String]
     def work_dir
-      File.join(base_dir, "ruby-#{RUBY_VERSION}", "rbs-#{RBS::VERSION}", "solargraph-#{Solargraph::VERSION}")
+      File.join(base_dir, "ruby-#{RUBY_VERSION}", "rbs-#{RBS::VERSION}", "solargraph-#{Solargraph::VERSION}-pins#{PIN_CACHE_FORMAT}")
     end
 
     # The current gem directory.

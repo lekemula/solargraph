@@ -175,7 +175,7 @@ module Solargraph
 
       # @return [String]
       def rooted_substring
-        @rooted_substring = generate_substring_from(&:rooted_tags)
+        generate_substring_from(&:rooted_tags)
       end
 
       # @return [String]

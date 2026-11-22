@@ -9,7 +9,7 @@ module Solargraph
 
       def generics
         # @type [Array<::String, nil>]
-        @generics ||= [].freeze
+        @generics ||= Empty::ARRAY
       end
 
       def identity

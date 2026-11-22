@@ -79,7 +79,7 @@ module Solargraph
       # @param subtypes [Array<ComplexType>]
       # @param rooted [Boolean]
       # @param parameters_type [Symbol, nil]
-      def initialize name, key_types = [], subtypes = [], rooted:, parameters_type: nil
+      def initialize name, key_types = Empty::ARRAY, subtypes = Empty::ARRAY, rooted:, parameters_type: nil
         if parameters_type.nil? && !(key_types.empty? && subtypes.empty?)
           raise 'You must supply parameters_type if you provide parameters'
         end
@@ -87,16 +87,26 @@ module Solargraph
         @name = name
         @parameters_type = parameters_type
         if implicit_union?
-          @key_types = key_types.uniq
-          @subtypes = subtypes.uniq
+          @key_types = Empty.share_array(key_types.uniq)
+          @subtypes = Empty.share_array(subtypes.uniq)
         else
-          @key_types = key_types
-          @subtypes = subtypes
+          @key_types = Empty.share_array(key_types)
+          @subtypes = Empty.share_array(subtypes)
         end
         @rooted = rooted
-        @all_params = []
-        @all_params.concat @key_types
-        @all_params.concat @subtypes
+        @all_params = Empty.share_array(@key_types + @subtypes)
+        # Memory efficiency: ivars memoized by readers start here so every
+        # type keeps one Ruby object shape and its ivars inline in the object
+        # slot (see Pin::Base#initialize)
+        @non_literal_name = nil
+        @tag = nil
+        @rooted_tag = nil
+        @duck_type = nil
+        @nil_type = nil
+        @tuple = nil
+        @namespace = nil
+        @substring = nil
+        @scope = nil
       end
 
       def implicit_union?

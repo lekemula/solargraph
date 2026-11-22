@@ -21,8 +21,7 @@ module Solargraph
       # @param original [String, nil] The name of the original method
       # @param splat [Hash] Additional options supported by superclasses
       def initialize scope: :instance, original: nil, **splat
-        super(**splat)
-        @scope = scope
+        super(**splat, scope: scope)
         @original = original
       end
 

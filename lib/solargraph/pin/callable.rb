@@ -18,11 +18,11 @@ module Solargraph
       #   an RBS non-optional block (`{ ... }` rather than `?{ ... }`).
       # @param [Hash{Symbol => Object}] splat
       def initialize block: nil, return_type: nil, parameters: [], block_required: false, **splat
-        super(**splat)
+        super(**splat, return_type: return_type)
         @block = block
-        @return_type = return_type
         @parameters = parameters
         @block_required = block_required
+        @parameter_names = nil
       end
 
       def detach_nodes! reload_from: nil
@@ -73,7 +73,7 @@ module Solargraph
 
       # @return [::Array<String>]
       def parameter_names
-        @parameter_names ||= parameters.map(&:name)
+        @parameter_names ||= Empty.share_array(parameters.map(&:name))
       end
 
       def generics
@@ -187,7 +187,7 @@ module Solargraph
       def method_name
         raise "closure was nil in #{inspect}" if closure.nil?
         # @sg-ignore Need to add nil check here
-        @method_name ||= closure.name
+        closure.name
       end
 
       # @param generics_to_resolve [::Array<String>]

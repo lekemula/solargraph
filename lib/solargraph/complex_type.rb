@@ -27,6 +27,7 @@ module Solargraph
       # @todo shouldn't need this cast - if statement above adds an 'Array' type
       # @type [Array<UniqueType>]
       @items = items
+      @namespace = nil
     end
 
     # @param api_map [ApiMap]

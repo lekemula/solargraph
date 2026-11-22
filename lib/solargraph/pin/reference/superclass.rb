@@ -6,6 +6,11 @@ module Solargraph
       # A Superclass reference pin.
       #
       class Superclass < Reference
+        def initialize **splat
+          super
+          @reference_gates = nil
+        end
+
         # @sg-ignore Need to add nil check here
         def reference_gates
           # @sg-ignore Need to add nil check here

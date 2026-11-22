@@ -32,9 +32,10 @@ module Solargraph
       # @param name [String] rooted name of the referenced type
       # @param generic_values [Array<String>]
       # @param [Hash{Symbol => Object}] splat
-      def initialize generic_values: [], **splat
+      def initialize generic_values: Empty::ARRAY, **splat
         super(**splat)
-        @generic_values = generic_values
+        @generic_values = Empty.share_array(generic_values)
+        @type = nil
       end
 
       # @return [ComplexType]
