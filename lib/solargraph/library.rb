@@ -714,7 +714,7 @@ module Solargraph
         logger.info "Cataloging #{workspace.directory.empty? ? 'generic workspace' : workspace.directory}"
         source_map_hash.each_value { |map| find_external_requires(map) }
         api_map.catalog bench
-        logger.info "Catalog complete (#{api_map.source_maps.length} files, #{api_map.pins.length} pins)"
+        logger.info "Catalog complete (#{api_map.source_maps.length} files, #{api_map.pin_count} pins)"
         # @todo This needs work
         # logger.info "#{api_map.uncached_yard_gemspecs.length} uncached YARD gemspecs"
         # logger.info "#{api_map.uncached_rbs_collection_gemspecs.length} uncached RBS collection gemspecs"

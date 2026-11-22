@@ -73,7 +73,7 @@ describe Solargraph::Shell do
       end
 
       it 'scans without erroring out' do
-        allow(api_map).to receive(:pins).and_return([])
+        allow(api_map).to receive_messages(pins: [], pin_count: 0)
         output = capture_stdout do
           shell.options = { directory: 'spec/fixtures/workspace' }
           shell.scan

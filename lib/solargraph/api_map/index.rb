@@ -2,212 +2,309 @@
 
 module Solargraph
   class ApiMap
+    # One layer of pins in a chain of indexes. Each layer catalogs only its own
+    # pins; lookups read through the layers below it.
+    #
+    # Overrides apply in layer order: an override in a higher layer wins over
+    # one in a lower layer for the same tag, wherever the overridden pin lives.
+    # Within a layer, later override pins win.
+    #
     class Index
       include Logging
 
-      # @return [Array<String>]
+      # Read-only view of one of the index hashes across a chain of layers.
+      # Values found in several layers are concatenated bottom layer first.
+      #
+      # @generic T
+      class View
+        # @type [Array<generic<T>>]
+        EMPTY = [].freeze
+
+        # @param hashes [Array<Hash{String, nil => Array<generic<T>>}>] bottom layer first
+        def initialize hashes
+          @hashes = hashes.reject(&:empty?)
+          # @type [Hash{String, nil => Array<generic<T>>}]
+          @memo = {}
+        end
+
+        # @param key [String, nil]
+        # @return [Array<generic<T>>]
+        def [] key
+          @memo.fetch(key) { lookup(key) }
+        end
+
+        # @param key [String, nil]
+        def key? key
+          @hashes.any? { |hash| hash.key?(key) }
+        end
+
+        # @return [Array<String, nil>]
+        def keys
+          return @hashes.first&.keys || [] if @hashes.length < 2
+
+          @hashes.flat_map(&:keys).uniq
+        end
+
+        # @return [Integer]
+        def size
+          keys.size
+        end
+
+        private
+
+        # @param key [String, nil]
+        # @return [Array<generic<T>>]
+        def lookup key
+          found = nil
+          combined = false
+          @hashes.each do |hash|
+            values = hash[key]
+            next unless values
+
+            if found.nil?
+              found = values
+            elsif combined
+              found.concat values
+            else
+              found += values
+              combined = true
+            end
+          end
+          return EMPTY if found.nil?
+
+          # @sg-ignore String, nil and String, NilClass do not unify
+          @memo[key] = found if combined
+          found
+        end
+      end
+
+      # @return [Set<String>]
       attr_reader :macro_method_names
 
-      # @return [Hash{String => Array<Pin::Method>}]
-      attr_reader :macro_method_name_pins
+      # @return [Array<Pin::Base>] the pins of this layer alone
+      attr_reader :own_pins
 
-      # @param pins [Array<Pin::Base>]
-      def initialize pins = []
+      # @return [Hash{String, nil => Array<Pin::Base>}]
+      attr_reader :own_path_pin_hash
+
+      # @return [Hash{String, nil => Array<Pin::Namespace>}]
+      attr_reader :own_namespace_hash
+
+      # @return [Hash{Class => Array<Pin::Base>}]
+      attr_reader :own_pin_class_hash
+
+      # @return [Hash{String, nil => Array<Pin::Reference::Include>}]
+      attr_reader :own_include_references
+
+      # @return [Hash{String, nil => Array<Pin::Reference::Extend>}]
+      attr_reader :own_extend_references
+
+      # @return [Hash{String, nil => Array<Pin::Reference::Prepend>}]
+      attr_reader :own_prepend_references
+
+      # @return [Hash{String, nil => Array<Pin::Reference::Superclass>}]
+      attr_reader :own_superclass_references
+
+      # @return [Hash{String, nil => Array<Pin::Reference::IncludedMixin>}]
+      attr_reader :own_included_mixin_references
+
+      # @return [Hash{String, nil => Array<Pin::FactoryParameter>}]
+      attr_reader :own_factory_parameter_hash
+
+      # @return [Hash{String, nil => Array<Pin::Method>}]
+      attr_reader :own_macro_method_name_pins
+
+      # @return [Hash{String => ComplexType}]
+      attr_reader :own_alias_hash
+
+      # @return [Array<Index>] bottom layer first, self last
+      attr_reader :layers
+
+      # @param pins [Enumerable<Pin::Base>]
+      # @param parent [Index, nil] the layer below this one
+      def initialize pins = [], parent = nil
+        @parent = parent
+        @layers = parent ? [*parent.layers, self] : [self]
+        # @type [Hash{Class<Pin::Base> => Set<Pin::Base>}]
+        @pin_select_cache = {}
         catalog pins
+      end
+
+      # @param pins [Enumerable<Pin::Base>]
+      # @return [Index] a new layer on top of this one
+      def merge pins
+        Index.new(pins, self)
       end
 
       # @return [Array<Pin::Base>]
       def pins
-        @pins ||= []
+        @pins ||= layers.length == 1 ? own_pins : layers.flat_map(&:own_pins)
       end
 
-      # @return [Hash{String => Array<Pin::Namespace>}]
+      # @return [Integer]
+      def pin_count
+        count = 0
+        layers.each { |layer| count += layer.own_pins.length }
+        count
+      end
+
+      # @return [View<Pin::Namespace>]
       def namespace_hash
-        # @param h [String]
-        # @param k [Array<Pin::Namespace>]
-        @namespace_hash ||= Hash.new { |h, k| h[k] = [] }
+        @namespace_hash ||= View.new(layers.map(&:own_namespace_hash))
       end
 
-      # @return [Hash{String => Array<Pin::Base>}]
-      def pin_class_hash
-        # @param h [String]
-        # @param k [Array<Pin::Base>]
-        @pin_class_hash ||= Hash.new { |h, k| h[k] = [] }
-      end
-
-      # @return [Hash{String => Array<Pin::Base>}]
+      # @return [View<Pin::Base>]
       def path_pin_hash
-        # @param h [String]
-        # @param k [Array<Pin::Base>]
-        @path_pin_hash ||= Hash.new { |h, k| h[k] = [] }
+        @path_pin_hash ||= View.new(layers.map(&:own_path_pin_hash))
+      end
+
+      # @return [View<Pin::Reference::Include>]
+      def include_references
+        @include_references ||= View.new(layers.map(&:own_include_references))
+      end
+
+      # @return [View<Pin::Reference::Extend>]
+      def extend_references
+        @extend_references ||= View.new(layers.map(&:own_extend_references))
+      end
+
+      # @return [View<Pin::Reference::Prepend>]
+      def prepend_references
+        @prepend_references ||= View.new(layers.map(&:own_prepend_references))
+      end
+
+      # @return [View<Pin::Reference::Superclass>]
+      def superclass_references
+        @superclass_references ||= View.new(layers.map(&:own_superclass_references))
+      end
+
+      # @return [View<Pin::Reference::IncludedMixin>]
+      def included_mixin_references
+        @included_mixin_references ||= View.new(layers.map(&:own_included_mixin_references))
+      end
+
+      # @return [View<Pin::FactoryParameter>]
+      def factory_parameter_hash
+        @factory_parameter_hash ||= View.new(layers.map(&:own_factory_parameter_hash))
+      end
+
+      # @return [View<Pin::Method>]
+      def macro_method_name_pins
+        @macro_method_name_pins ||= View.new(layers.map(&:own_macro_method_name_pins))
       end
 
       # @return [Hash{String => ComplexType}]
       def alias_hash
-        @alias_hash ||= {}
+        @alias_hash ||= begin
+          # @type [Hash{String => ComplexType}]
+          hash = {}
+          layers.each { |layer| hash.merge!(layer.own_alias_hash) }
+          hash
+        end
       end
 
       # @generic T
       # @param klass [Class<generic<T>>]
       # @return [Set<generic<T>>]
       def pins_by_class klass
-        # @type [Set<generic<T>>]
-        s = Set.new
-        # @sg-ignore need to support destructured args in blocks
-        @pin_select_cache[klass] ||= pin_class_hash.each_with_object(s) { |(key, o), n| n.merge(o) if key <= klass }
-      end
-
-      # @return [Hash{String => Array<Pin::Reference::Include>}]
-      def include_references
-        # @param h [String]
-        # @param k [Array<String>]
-        @include_references ||= Hash.new { |h, k| h[k] = [] }
-      end
-
-      # @return [Hash{String => Array<Pin::Reference::Include>}]
-      def include_reference_pins
-        # @param h [String]
-        # @param k [Array<Pin::Reference::Include>]
-        @include_reference_pins ||= Hash.new { |h, k| h[k] = [] }
-      end
-
-      # @return [Hash{String => Array<Pin::Reference::Extend>}]
-      def extend_references
-        # @param h [String]
-        # @param k [Array<String>]
-        @extend_references ||= Hash.new { |h, k| h[k] = [] }
-      end
-
-      # @return [Hash{String => Array<Pin::Reference::Prepend>}]
-      def prepend_references
-        # @param h [String]
-        # @param k [Array<String>]
-        @prepend_references ||= Hash.new { |h, k| h[k] = [] }
-      end
-
-      # @return [Hash{String => Array<Pin::Reference::IncludedMixin>}]
-      def included_mixin_references
-        # @param h [String]
-        # @param k [Array<Pin::Reference::IncludedMixin>]
-        @included_mixin_references ||= Hash.new { |h, k| h[k] = [] }
-      end
-
-      # @return [Hash{String => Array<Pin::Reference::Superclass>}]
-      def superclass_references
-        # @param h [String]
-        # @param k [Array<String>]
-        @superclass_references ||= Hash.new { |h, k| h[k] = [] }
-      end
-
-      # @return [Hash{String => Array<Pin::FactoryParameter>}]
-      def factory_parameter_hash
-        @factory_parameter_hash ||= Hash.new { |h, k| h[k] = [] }
-      end
-
-      # @param pins [Enumerable<Pin::Base>]
-      # @return [self]
-      def merge pins
-        deep_clone.catalog pins
-      end
-
-      protected
-
-      attr_writer :pins, :pin_select_cache, :namespace_hash, :pin_class_hash, :path_pin_hash, :include_references,
-                  :extend_references, :prepend_references, :superclass_references, :factory_parameter_hash,
-                  :macro_method_names, :macro_method_name_pins, :included_mixin_references
-
-      # @return [self]
-      def deep_clone
-        Index.allocate.tap do |copy|
-          copy.pin_select_cache = {}
-          copy.pins = pins.clone
-          copy.macro_method_names = macro_method_names
-          %i[
-            namespace_hash pin_class_hash path_pin_hash include_references extend_references prepend_references
-            superclass_references macro_method_name_pins included_mixin_references
-          ].each do |sym|
-            copy.send("#{sym}=", send(sym).clone)
-            copy.send(sym)&.transform_values!(&:clone)
-          end
+        @pin_select_cache[klass] ||= begin
+          # @type [Set<generic<T>>]
+          set = Set.new
+          layers.each { |layer| set.merge(layer.own_pins_by_class(klass)) }
+          set
         end
-      end
-
-      # @param new_pins [Enumerable<Pin::Base>]
-      #
-      # @return [self]
-      def catalog new_pins
-        # @type [Hash{Class<generic<T>> => Set<generic<T>>}]
-        @pin_select_cache = {}
-        pins.concat new_pins
-        set = new_pins.to_set
-        # @param k [String]
-        # @param v [Set<Pin::Base>]
-        set.classify(&:class)
-           .map { |k, v| pin_class_hash[k].concat v.to_a }
-        # @param k [String]
-        # @param v [Set<Pin::Namespace>]
-        set.classify(&:namespace)
-           .map { |k, v| namespace_hash[k].concat v.to_a }
-        # @param k [String]
-        # @param v [Set<Pin::Base>]
-        set.classify(&:path)
-           .map { |k, v| path_pin_hash[k].concat v.to_a }
-        @namespaces = path_pin_hash.keys.compact.to_set
-        map_references Pin::Reference::Include, include_references
-        map_references Pin::Reference::Prepend, prepend_references
-        map_references Pin::Reference::Extend, extend_references
-        map_references Pin::Reference::Superclass, superclass_references
-        map_references Pin::Reference::IncludedMixin, included_mixin_references
-        macro_pins = pins_by_class(Pin::Method).select { |pin| pin.macros.any? }
-        @macro_method_names = macro_pins.to_set(&:name)
-        @macro_method_name_pins = macro_pins.to_set.classify(&:name)
-        map_factory_parameters
-        map_overrides
-        pins_by_class(Pin::Reference::TypeAlias).each { |pin| alias_hash[pin.name] = pin.return_type }
-        self
       end
 
       # @generic T
       # @param klass [Class<generic<T>>]
-      # @param hash [Hash{String => Array<generic<T>>}]
-      #
+      # @return [Array<generic<T>>] the pins of this layer alone
+      def own_pins_by_class klass
+        result = []
+        # @param key [Class]
+        # @param pins [Array<Pin::Base>]
+        own_pin_class_hash.each_pair { |key, pins| result.concat(pins) if key <= klass }
+        result
+      end
+
+      private
+
+      # @param new_pins [Enumerable<Pin::Base>]
       # @return [void]
-      def map_references klass, hash
-        # @param pin [generic<T>]
-        pins_by_class(klass).each do |pin|
-          hash[pin.namespace].push pin
-        end
+      def catalog new_pins
+        @own_pins = new_pins.to_a.dup
+        set = own_pins.to_set
+        @own_pin_class_hash = set.classify(&:class).transform_values(&:to_a)
+        @own_namespace_hash = set.classify(&:namespace).transform_values(&:to_a)
+        @own_path_pin_hash = set.classify(&:path).transform_values(&:to_a)
+        @own_include_references = references(Pin::Reference::Include)
+        @own_extend_references = references(Pin::Reference::Extend)
+        @own_prepend_references = references(Pin::Reference::Prepend)
+        @own_superclass_references = references(Pin::Reference::Superclass)
+        @own_included_mixin_references = references(Pin::Reference::IncludedMixin)
+        @own_factory_parameter_hash = own_pins_by_class(Pin::FactoryParameter).group_by(&:method_path)
+        catalog_macros
+        map_overrides
+        @own_alias_hash = own_pins_by_class(Pin::Reference::TypeAlias).to_h { |pin| [pin.name, pin.return_type] }
+      end
+
+      # @generic T
+      # @param klass [Class<generic<T>>]
+      # @return [Hash{String, nil => Array<generic<T>>}]
+      def references klass
+        own_pins_by_class(klass).group_by(&:namespace)
       end
 
       # @return [void]
+      def catalog_macros
+        macro_pins = own_pins_by_class(Pin::Method).select { |pin| pin.macros.any? }
+        @own_macro_method_name_pins = macro_pins.group_by(&:name)
+        inherited = @parent&.macro_method_names || Set.new
+        @macro_method_names = macro_pins.empty? ? inherited : inherited | macro_pins.map(&:name)
+      end
+
+      # Apply the overrides of the layers below to this layer's pins, then this
+      # layer's overrides to the pins of every layer.
+      #
+      # @return [void]
       def map_overrides
-        # @todo should complain when type for 'ovr' is not provided
-        # @param ovr [Pin::Reference::Override]
-        pins_by_class(Pin::Reference::Override).each do |ovr|
-          logger.debug { "ApiMap::Index#map_overrides: Looking at override #{ovr} for #{ovr.name}" }
-          pins = path_pin_hash[ovr.name]
-          logger.debug { "ApiMap::Index#map_overrides: pins for path=#{ovr.name}: #{pins}" }
-          pins.each do |pin|
-            new_pin = (path_pin_hash[pin.path.sub('#initialize', '.new')].first if pin.path.end_with?('#initialize'))
-            (ovr.tags.map(&:tag_name) + ovr.delete).uniq.each do |tag|
-              # @sg-ignore Wrong argument type for
-              #   YARD::Docstring#delete_tags: name expected String,
-              #   received String, Symbol - delete_tags is ok with a
-              #   _ToS, but we should fix anyway
-              pin.docstring.delete_tags tag
-              new_pin&.docstring&.delete_tags tag
+        unless own_pins.empty?
+          layers.take(layers.length - 1).each do |layer|
+            layer.own_pins_by_class(Pin::Reference::Override).each do |ovr|
+              targets = own_path_pin_hash[ovr.name]
+              apply_override ovr, targets if targets
             end
-            ovr.tags.each do |tag|
-              pin.docstring.add_tag(tag)
-              redefine_return_type pin, tag
-              pin.reset_generated!
+          end
+        end
+        own_pins_by_class(Pin::Reference::Override).each do |ovr|
+          apply_override ovr, path_pin_hash[ovr.name]
+        end
+      end
 
-              next unless new_pin
+      # @param ovr [Pin::Reference::Override]
+      # @param pins [Array<Pin::Base>]
+      # @return [void]
+      def apply_override ovr, pins
+        pins.each do |pin|
+          logger.debug { "ApiMap::Index#apply_override: applying #{ovr} to #{pin}" }
+          new_pin = (path_pin_hash[pin.path.sub('#initialize', '.new')].first if pin.path.end_with?('#initialize'))
+          (ovr.tags.map(&:tag_name) + ovr.delete).uniq.each do |tag|
+            # @sg-ignore Wrong argument type for
+            #   YARD::Docstring#delete_tags: name expected String,
+            #   received String, Symbol - delete_tags is ok with a
+            #   _ToS, but we should fix anyway
+            pin.docstring.delete_tags tag
+            new_pin&.docstring&.delete_tags tag
+          end
+          ovr.tags.each do |tag|
+            pin.docstring.add_tag(tag)
+            redefine_return_type pin, tag
+            pin.reset_generated!
 
-              new_pin.docstring.add_tag(tag)
-              redefine_return_type new_pin, tag
-              new_pin.reset_generated!
-            end
+            next unless new_pin
+
+            new_pin.docstring.add_tag(tag)
+            redefine_return_type new_pin, tag
+            new_pin.reset_generated!
           end
         end
       end
@@ -225,13 +322,6 @@ module Solargraph
         return unless pin.is_a?(Pin::Method)
         pin.signatures.each do |sig|
           sig.instance_variable_set(:@return_type, ComplexType.try_parse(tag.type))
-        end
-      end
-
-      # @return [void]
-      def map_factory_parameters
-        pins_by_class(Pin::FactoryParameter).each do |fp|
-          factory_parameter_hash[fp.method_path] << fp
         end
       end
     end

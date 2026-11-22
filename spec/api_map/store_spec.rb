@@ -49,6 +49,85 @@ describe Solargraph::ApiMap::Store do
     expect(store.get_path_pins('Bar')).to eq([bar_pin])
   end
 
+  it 'counts pins of every pinset' do
+    foo_pin = Solargraph::Pin::Namespace.new(name: 'Foo')
+    bar_pin = Solargraph::Pin::Namespace.new(name: 'Bar')
+    store = described_class.new([foo_pin], [], [bar_pin])
+
+    expect(store.pin_count).to eq(2)
+    expect(store.pins).to eq([foo_pin, bar_pin])
+  end
+
+  it 'drops lookups memoized for replaced pinsets' do
+    foo_pin = Solargraph::Pin::Namespace.new(name: 'Foo')
+    one = Solargraph::Pin::Method.new(name: 'one', closure: foo_pin, scope: :instance)
+    two = Solargraph::Pin::Method.new(name: 'two', closure: foo_pin, scope: :instance)
+    three = Solargraph::Pin::Method.new(name: 'three', closure: foo_pin, scope: :instance)
+    store = described_class.new([foo_pin, one], [two])
+    expect(store.get_methods('Foo').map(&:name)).to eq(%w[one two])
+
+    store.update([foo_pin, one], [three])
+    expect(store.get_methods('Foo').map(&:name)).to eq(%w[one three])
+  end
+
+  it 'runs the update block against the updated pinsets' do
+    foo_pin = Solargraph::Pin::Namespace.new(name: 'Foo')
+    bar_pin = Solargraph::Pin::Namespace.new(name: 'Bar')
+    baz_pin = Solargraph::Pin::Namespace.new(name: 'Baz')
+    store = described_class.new([foo_pin], [])
+    seen = nil
+    store.update([foo_pin], [bar_pin]) do
+      seen = store.get_path_pins('Bar')
+      [baz_pin]
+    end
+
+    expect(seen).to eq([bar_pin])
+    expect(store.get_path_pins('Baz')).to eq([baz_pin])
+  end
+
+  describe 'reference pins' do
+    let(:map) do
+      Solargraph::SourceMap.load_string(%(
+        module Inc; end
+        module Ext; end
+        module Pre; end
+        module Hook; def self.included(base); end; end
+        class Foo
+          include Inc
+          extend Ext
+          prepend Pre
+        end
+      ), 'test.rb')
+    end
+
+    let(:store) do
+      other = Solargraph::Pin::Namespace.new(name: 'Other')
+      described_class.new(map.pins, [other], [], [other]).tap do |store|
+        store.update(map.pins, [other], [other], [other]) { [] }
+        store.update(map.pins, [other], [other], []) { [] }
+      end
+    end
+
+    it 'returns each include once' do
+      expect(store.get_includes('Foo').map(&:name)).to eq(['Inc'])
+    end
+
+    it 'returns each extend once' do
+      expect(store.get_extends('Foo').map(&:name)).to eq(['Ext'])
+    end
+
+    it 'returns each prepend once' do
+      expect(store.get_prepends('Foo').map(&:name)).to eq(['Pre'])
+    end
+
+    it 'returns each included mixin once' do
+      mixin = Solargraph::Pin::Reference::IncludedMixin.new(name: 'Mixin', keyword: :include, closure: map.first_pin('Foo'))
+      store = described_class.new(map.pins + [mixin], [], [])
+      store.update(map.pins + [mixin], [Solargraph::Pin::Namespace.new(name: 'Other')], [])
+      expect(store.get_included_mixins('Foo').map(&:name)).to eq(['Mixin'])
+    end
+  end
+
   # @todo This will become #get_superclass
   describe '#get_superclass' do
     it 'returns simple superclasses' do
