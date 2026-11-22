@@ -61,6 +61,32 @@ describe Solargraph::External do
       pin = external.pins.find { |pin| pin.path == 'Addressable::URI.parse' }
       expect(pin).to be_a(Solargraph::Pin::Method)
     end
+
+    context 'with cached addressable' do
+      let(:metagem) { external.loaded_gems.find { |gem| gem.name == 'addressable' } }
+      let(:cache_file) { Solargraph::Collection::Gem.new(metagem).cache_file }
+
+      before do
+        external.unloaded_gems.each { |metagem| Solargraph::Collection::Gem.load(metagem) }
+        external.update(requires)
+      end
+
+      it 'releases the gem pins the combination replaces' do
+        expect(Solargraph::Collection.mem_cache.keys).not_to include(cache_file)
+      end
+
+      it 'loads the combined pins for the gem without caching its own again' do
+        pins = Solargraph::Collection::Gem.load(metagem)
+        expect(pins.map(&:source)).to include(:combined)
+        expect(Solargraph::Collection.mem_cache.keys).not_to include(cache_file)
+      end
+
+      it 'reuses the combined pins for another workspace with the same collection' do
+        other = described_class.new(directory, requires)
+        pin = external.pins.find { |pin| pin.path == 'Addressable::URI.parse' }
+        expect(other.pins.find { |pin| pin.path == 'Addressable::URI.parse' }).to equal(pin)
+      end
+    end
   end
 
   it 'tracks unresolved requires' do

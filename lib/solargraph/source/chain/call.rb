@@ -338,11 +338,11 @@ module Solargraph
         # @return [Pin::ProxyType]
         def inner_process_macro pin, macro, api_map, context, locals
           vals = arguments.map { |c| Pin::ProxyType.anonymous(c.infer(api_map, pin, locals), source: :chain) }
-          txt = macro.tag.text.clone
+          txt = macro.tag.text.dup
           # @sg-ignore Need to add nil check here
           if txt.empty? && macro.tag.name
             named = api_map.named_macro(macro.tag.name)
-            txt = named.tag.text.clone if named
+            txt = named.tag.text.dup if named
           end
           i = 1
           vals.each do |v|

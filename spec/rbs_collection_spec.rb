@@ -19,6 +19,18 @@ describe Solargraph::RbsCollection do
     end
   end
 
+  describe '#signature_path' do
+    it 'locates the signatures of a gem in the collection' do
+      metagem = instance_double(Solargraph::Metagem, name: 'addressable', version: '2.8.0')
+      expect(rbs_collection.signature_path(metagem)).to end_with(File.join('.gem_rbs_collection', 'addressable', '0'))
+    end
+
+    it 'is nil for a gem the collection lacks' do
+      metagem = instance_double(Solargraph::Metagem, name: 'not_collected', version: '1.0.0')
+      expect(rbs_collection.signature_path(metagem)).to be_nil
+    end
+  end
+
   describe '#stdlib_names' do
     let(:lockfile) { File.join('spec', 'fixtures', 'rbs_collection_stdlib', 'rbs_collection.lock.yaml') }
 
