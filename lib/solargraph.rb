@@ -58,6 +58,7 @@ module Solargraph
   autoload :RbsTranslator,    'solargraph/rbs_translator'
   autoload :RbsCollection,    'solargraph/rbs_collection'
   autoload :Plugin,           'solargraph/plugin'
+  autoload :ProfilePhases,    'solargraph/profile_phases'
 
   dir = File.dirname(__FILE__)
   VIEWS_PATH = File.join(dir, 'solargraph', 'views')

@@ -374,11 +374,13 @@ module Solargraph
       end
     end
 
-    desc 'profile [FILE]', 'Profile go-to-definition performance using vernier'
+    desc 'profile [FILE]', 'Profile workspace mapping, the first catalog and go-to-definition using vernier'
     option :directory, type: :string, aliases: :d, desc: 'The workspace directory', default: '.'
     option :output_dir, type: :string, aliases: :o, desc: 'The output directory for profiles', default: './tmp/profiles'
-    option :line, type: :numeric, aliases: :l, desc: 'Line number (0-based)', default: 4
-    option :column, type: :numeric, aliases: :c, desc: 'Column number', default: 10
+    option :line, type: :numeric, aliases: :l, desc: 'Line number, 0-based (editor line 1 is 0)', default: 4
+    option :column, type: :numeric, aliases: :c, desc: 'Column number, 0-based', default: 10
+    option :runs, type: :numeric, aliases: :r, desc: 'Go-to-definition requests to run (the first one, then warm)',
+                  default: 3
     option :memory, type: :boolean, aliases: :m, desc: 'Include memory usage counter', default: true
     # @param file [String, nil]
     # @return [void]
@@ -397,6 +399,9 @@ module Solargraph
       hooks << :memory_usage if options[:memory]
 
       directory = File.realpath(options[:directory])
+      test_file = profile_test_file(directory, file)
+      return puts('No Ruby files found in workspace') if test_file.nil?
+
       FileUtils.mkdir_p(options[:output_dir])
 
       host = Solargraph::LanguageServer::Host.new
@@ -407,12 +412,16 @@ module Solargraph
       def host.send_notification method, params
         puts "Notification: #{method} - #{params}"
       end
+      phases = Solargraph::ProfilePhases.new(host)
 
       parse_path = File.join(options[:output_dir], 'parse_benchmark.json.gz')
       catalog_path = File.join(options[:output_dir], 'catalog_benchmark.json.gz')
       definition_path = File.join(options[:output_dir], 'definition_benchmark.json.gz')
 
-      prepare_time = catalog_time = definition_time = nil
+      # @type [Hash{String => Float}]
+      times = {}
+      # @type [Array<Float>]
+      definition_times = []
 
       # Trap CTRL-C so the in-progress Vernier.profile block can unwind through
       # its ensure clause and still write its output file. A second CTRL-C
@@ -431,71 +440,35 @@ module Solargraph
 
       begin
         puts 'Parsing and mapping source files...'
-        prepare_start = Time.now
-        Vernier.profile(out: parse_path, hooks: hooks) do
-          puts 'Mapping libraries'
-          host.prepare(directory)
-          sleep 0.2 until host.libraries.all?(&:mapped?)
-        end
-        prepare_time = Time.now - prepare_start
+        times['Parsing & mapping'] = profile_phase(parse_path, hooks) { phases.map(directory) }
 
         puts 'Building the catalog...'
-        catalog_start = Time.now
-        Vernier.profile(out: catalog_path, hooks: hooks) do
-          host.catalog
-        end
-        catalog_time = Time.now - catalog_start
+        times['Catalog building'] = profile_phase(catalog_path, hooks) { phases.catalog }
 
-        # Determine test file
-        if file
-          test_file = File.join(directory, file)
-        else
-          test_file = File.join(directory, 'lib', 'other.rb')
-          unless File.exist?(test_file)
-            # Fallback to any Ruby file in the workspace
-            workspace = Solargraph::Workspace.new(directory)
-            test_file = workspace.filenames.find { |f| f.end_with?('.rb') }
-            unless test_file
-              puts 'No Ruby files found in workspace'
-              return
-            end
+        file_uri = Solargraph::LanguageServer::UriHelpers.file_to_uri(test_file)
+        puts "Profiling go-to-definition for #{test_file}"
+        puts "Position: line #{options[:line]}, column #{options[:column]} (0-based)"
+        print_profile_position(test_file, options[:line], options[:column])
+
+        times['Go-to-definition'] = profile_phase(definition_path, hooks) do
+          options[:runs].times do
+            result = nil
+            time = measure { result = phases.definition(file_uri, options[:line], options[:column]) }
+            definition_times.push(time)
+            puts "Run #{definition_times.length}: #{format_ms(time)} - #{result.inspect}"
           end
         end
-
-        file_uri = Solargraph::LanguageServer::UriHelpers.file_to_uri(File.absolute_path(test_file))
-
-        puts "Profiling go-to-definition for #{test_file}"
-        puts "Position: line #{options[:line]}, column #{options[:column]}"
-
-        definition_start = Time.now
-        Vernier.profile(out: definition_path, hooks: hooks) do
-          message = Solargraph::LanguageServer::Message::TextDocument::Definition.new(
-            host, {
-              'params' => {
-                'textDocument' => { 'uri' => file_uri },
-                'position' => { 'line' => options[:line], 'character' => options[:column] }
-              }
-            }
-          )
-          puts 'Processing go-to-definition request...'
-          result = message.process
-
-          puts "Result: #{result.inspect}"
-        end
-        definition_time = Time.now - definition_start
       rescue Interrupt
         puts "\nProfile run interrupted; partial profile(s) have been written."
       ensure
         Signal.trap('INT', previous_int_trap || 'DEFAULT')
 
         puts "\n=== Timing Results ==="
-        puts "Parsing & mapping: #{(prepare_time * 1000).round(2)}ms" if prepare_time
-        puts "Catalog building: #{(catalog_time * 1000).round(2)}ms" if catalog_time
-        puts "Go-to-definition: #{(definition_time * 1000).round(2)}ms" if definition_time
-        if prepare_time && catalog_time && definition_time
-          total_time = prepare_time + catalog_time + definition_time
-          puts "Total time: #{(total_time * 1000).round(2)}ms"
+        times.each { |name, time| puts "#{name}: #{format_ms(time)}" }
+        definition_times.each_with_index do |time, index|
+          puts "  #{index.zero? ? 'first' : 'warm'} request: #{format_ms(time)}"
         end
+        puts "Total time: #{format_ms(times.values.sum(0.0))}" if times.length == 3
 
         saved = [parse_path, catalog_path, definition_path].select { |p| File.exist?(p) }
         unless saved.empty?
@@ -544,6 +517,53 @@ module Solargraph
     end
 
     private
+
+    # @param directory [String]
+    # @param file [String, nil]
+    # @return [String, nil]
+    def profile_test_file directory, file
+      return File.join(directory, file) if file
+
+      default = File.join(directory, 'lib', 'other.rb')
+      return default if File.exist?(default)
+
+      Solargraph::Workspace.new(directory).filenames.find { |f| f.end_with?('.rb') }
+    end
+
+    # @param path [String]
+    # @param hooks [Array<Symbol>]
+    # @return [Float] wall time in seconds, without writing the profile
+    def profile_phase path, hooks, &block
+      time = 0.0
+      # @sg-ignore vernier is an optional dependency loaded by #profile
+      Vernier.profile(out: path, hooks: hooks) { time = measure(&block) }
+      time
+    end
+
+    # @return [Float] wall time in seconds
+    def measure
+      start = Time.now
+      yield
+      Time.now - start
+    end
+
+    # @param seconds [Float]
+    # @return [String]
+    def format_ms seconds
+      "#{(seconds * 1000).round(2)}ms"
+    end
+
+    # @param filename [String]
+    # @param line [Integer] 0-based
+    # @param column [Integer] 0-based
+    # @return [void]
+    def print_profile_position filename, line, column
+      text = File.readlines(filename)[line]
+      return puts("Line #{line} is past the end of #{filename}") if text.nil?
+
+      puts "  #{text.chomp}"
+      puts "  #{' ' * column}^"
+    end
 
     # @param pin [Solargraph::Pin::Base]
     # @return [String]
