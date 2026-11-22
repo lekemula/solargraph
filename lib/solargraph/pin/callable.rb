@@ -25,6 +25,12 @@ module Solargraph
         @block_required = block_required
       end
 
+      def detach_nodes!
+        parameters.each(&:detach_nodes!)
+        @block.detach_nodes! if @block.is_a?(Callable)
+        super
+      end
+
       def reset_generated!
         parameters.each(&:reset_generated!)
         super

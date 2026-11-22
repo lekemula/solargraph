@@ -17,6 +17,12 @@ module Solargraph
           @word = word
         end
 
+        # @return [self]
+        def detach_nodes!
+          @node = nil if instance_variable_defined?(:@node)
+          self
+        end
+
         def undefined?
           word == '<undefined>'
         end

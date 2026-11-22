@@ -50,9 +50,35 @@ module Solargraph
         # Generating an ApiMap is necessary for processing macros
         bench = Bench.new(source_maps: source_maps)
         source_pins = ApiMap.new.catalog(bench).pins.select { |pin| files.include?(pin.filename) }
+        # After the catalog, whose macro expansion reads the nodes
+        detach_nodes source_pins
 
         rbs_pins = RbsMap::Gem.pins(metagem)
         RbsMap::Helpers.combine(source_pins, rbs_pins)
+      end
+
+      # Detaches nodes from the pins and from every pin and chain they reach.
+      # The pins can reach pins that are no longer in the list, e.g. the
+      # parameters of a `module_function` copy close over the original method.
+      #
+      # @param pins [Array<Pin::Base>]
+      # @return [void]
+      def detach_nodes pins
+        seen = {}.compare_by_identity
+        # @type [::Array<Object>]
+        stack = pins.dup
+        until stack.empty?
+          obj = stack.pop
+          next if seen.key?(obj)
+          seen[obj] = true
+          case obj
+          when Array then stack.concat(obj)
+          when Pin::Base, Source::Chain, Source::Chain::Link
+            # @sg-ignore Need to narrow a multi-class when
+            obj.detach_nodes!
+            obj.instance_variables.each { |ivar| stack.push obj.instance_variable_get(ivar) }
+          end
+        end
       end
     end
   end

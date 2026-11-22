@@ -25,6 +25,12 @@ module Solargraph
         @name = '<block>'
       end
 
+      def detach_nodes!
+        @node = nil
+        @receiver = nil
+        super
+      end
+
       # @param api_map [ApiMap]
       # @return [void]
       def rebind api_map

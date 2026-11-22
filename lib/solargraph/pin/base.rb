@@ -182,6 +182,14 @@ module Solargraph
         end
       end
 
+      # Drop references to Parser AST nodes, which keep the whole syntax tree
+      # and source text of the pin's file alive.
+      #
+      # @return [self]
+      def detach_nodes!
+        self
+      end
+
       # @return [void]
       def reset_generated!
         # @return_type doesn't go here as subclasses tend to assign it

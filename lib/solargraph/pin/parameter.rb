@@ -15,11 +15,14 @@ module Solargraph
 
       # @param decl [::Symbol] :arg, :optarg, :kwarg, :kwoptarg, :restarg, :kwrestarg, :block, :blockarg
       # @param asgn_code [String, nil]
+      # @param hash_default [Boolean, nil] Whether the default value is a
+      #   hash literal, kept after #detach_nodes!
       # @param [Hash{Symbol => Object}] splat
-      def initialize decl: :arg, asgn_code: nil, **splat
+      def initialize decl: :arg, asgn_code: nil, hash_default: nil, **splat
         super(**splat)
         @asgn_code = asgn_code
         @decl = decl
+        @hash_default = hash_default
       end
 
       def type_location
@@ -37,12 +40,14 @@ module Solargraph
         new_attrs = if other.is_a?(Parameter)
                       {
                         decl: assert_same(other, :decl),
-                        asgn_code: choose(other, :asgn_code)
+                        asgn_code: choose(other, :asgn_code),
+                        hash_default: @hash_default.nil? ? other.detached_hash_default : @hash_default
                       }
                     else
                       {
                         decl: decl,
-                        asgn_code: asgn_code
+                        asgn_code: asgn_code,
+                        hash_default: @hash_default
                       }
                     end
         super(other, new_attrs.merge(attrs))
@@ -63,8 +68,12 @@ module Solargraph
       end
 
       def kwrestarg?
-        # @sg-ignore flow sensitive typing needs to handle attrs
-        decl == :kwrestarg || (assignment && %i[HASH hash].include?(assignment.type))
+        decl == :kwrestarg || hash_default?
+      end
+
+      def detach_nodes!
+        @hash_default = hash_default?
+        super
       end
 
       def needs_consistent_name?
@@ -335,6 +344,21 @@ module Solargraph
           return params unless params.empty?
         end
         nil
+      end
+
+      protected
+
+      # @return [Boolean, nil]
+      def detached_hash_default
+        @hash_default
+      end
+
+      private
+
+      def hash_default?
+        return @hash_default unless @hash_default.nil?
+        # @sg-ignore flow sensitive typing needs to handle attrs
+        !assignment.nil? && %i[HASH hash].include?(assignment.type)
       end
     end
   end

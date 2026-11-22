@@ -63,6 +63,11 @@ module Solargraph
         end
       end
 
+      def detach_nodes!
+        @receiver_chain&.detach_nodes!
+        super
+      end
+
       # @param api_map [ApiMap]
       def resolvable? api_map
         resolve_method(api_map)
