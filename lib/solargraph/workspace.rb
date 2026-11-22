@@ -19,6 +19,11 @@ module Solargraph
     attr_reader :gemnames
     alias source_gems gemnames
 
+    # Changes whenever a file is added to or removed from the workspace.
+    #
+    # @return [Integer]
+    attr_reader :generation
+
     # @param directory [String] TODO: Remove '' and '*' special cases
     # @param config [Config, nil]
     # @param server [Hash]
@@ -32,6 +37,7 @@ module Solargraph
                    end
       @config = config
       @server = server
+      @generation = 0
       load_sources
       @gemnames = []
       require_plugins
@@ -72,6 +78,7 @@ module Solargraph
       sources.each do |source|
         next unless directory == '*' || config.calculated.include?(source.filename)
 
+        @generation = @generation.next unless source_hash.key?(source.filename)
         # @sg-ignore Wrong argument type for Hash#[]=: arg0 expected String, received String, nil
         source_hash[source.filename] = source
         includes_any = true
@@ -88,6 +95,7 @@ module Solargraph
     def remove filename
       return false unless source_hash.key?(filename)
       source_hash.delete filename
+      @generation = @generation.next
       true
     end
 
@@ -181,6 +189,7 @@ module Solargraph
     # @param updater [Source::Updater]
     # @return [void]
     def synchronize! updater
+      @generation = @generation.next unless source_hash.key?(updater.filename)
       # @sg-ignore Need to add nil check here
       source_hash[updater.filename] = source(updater.filename).synchronize(updater)
     end
@@ -237,6 +246,7 @@ module Solargraph
 
     # @return [void]
     def load_sources
+      @generation = @generation.next
       source_hash.clear
       return if directory.empty? || directory == '*'
       size = config.calculated.length

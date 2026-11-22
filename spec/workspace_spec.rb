@@ -145,4 +145,33 @@ describe Solargraph::Workspace do
       described_class.new('./path', config)
     end.not_to raise_error
   end
+
+  describe '#generation' do
+    it 'changes when a file is added or removed' do
+      before = workspace.generation
+      added = File.join(dir_path, 'added.rb')
+      File.write added, 'exit'
+      workspace.merge Solargraph::Source.load(added)
+      after_add = workspace.generation
+      workspace.remove added
+
+      expect(after_add).not_to eq(before)
+      expect(workspace.generation).not_to eq(after_add)
+    end
+
+    it 'stays the same when a known file is updated or evicted' do
+      before = workspace.generation
+      workspace.merge Solargraph::Source.load_string('puts 1', file_path)
+      workspace.evict file_path
+
+      expect(workspace.generation).to eq(before)
+    end
+
+    it 'stays the same when removing an unknown file' do
+      before = workspace.generation
+      workspace.remove File.join(dir_path, 'unknown.rb')
+
+      expect(workspace.generation).to eq(before)
+    end
+  end
 end

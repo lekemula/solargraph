@@ -167,7 +167,7 @@ module Solargraph
       result = false
       filenames.each do |filename|
         detach filename
-        source_map_hash.delete(filename)
+        drop_source_map filename
         SourceCache.instance.forget filename if @evict_sources
         result ||= workspace.remove(filename)
       end
@@ -499,23 +499,25 @@ module Solargraph
     end
 
     def mapped?
-      (workspace.filenames - source_map_hash.keys).empty?
+      unmapped_filenames.empty?
     end
 
+    # Map the first workspace file that is not mapped yet. A file whose source
+    # cannot be loaded stays first in line, so mapping stops there.
+    #
     # Mapping the last file catalogs the workspace. The block, if given, runs
     # right before that catalog starts.
     #
     # @yieldparam [SourceMap] the last file's map
     # @return [SourceMap, Boolean]
     def next_map
-      return false if mapped?
-      filename = workspace.filenames.find { |f| !source_map_hash.key?(f) }
+      filename = unmapped_filenames.first
       return false if filename.nil?
       src = workspace.source(filename)
       return false if src.nil?
       Logging.logger.debug "Mapping #{filename}"
       map = mutex.synchronize do
-        mapped = source_map_hash[filename] = Solargraph::SourceMap.map(src)
+        mapped = store_source_map(filename, Solargraph::SourceMap.map(src))
         maybe_evict mapped
         mapped
       end
@@ -532,9 +534,7 @@ module Solargraph
     def map!
       workspace.sources.each do |src|
         # @sg-ignore OK if src.filename is nil
-        source_map_hash[src.filename] = Solargraph::SourceMap.map(src)
-        # @sg-ignore OK if src.filename is nil
-        find_external_requires source_map_hash[src.filename]
+        find_external_requires store_source_map(src.filename, Solargraph::SourceMap.map(src))
       end
       self
     end
@@ -649,7 +649,7 @@ module Solargraph
     def forget_source_map filename
       return unless source_map_hash.key?(filename)
 
-      source_map_hash.delete filename
+      drop_source_map filename
       source_map_external_require_hash.delete filename
       @external_requires = nil
     end
@@ -711,9 +711,35 @@ module Solargraph
       # @sg-ignore Wrong argument type for Solargraph::Workspace#has_file?: filename expected String, received String, nil
       return unless @current == source || workspace.has_file?(source.filename)
       # @sg-ignore OK if source.filename is nil
-      source_map_hash[source.filename] = Solargraph::SourceMap.map(source)
-      # @sg-ignore OK if source.filename is nil
-      maybe_evict source_map_hash[source.filename]
+      maybe_evict store_source_map(source.filename, Solargraph::SourceMap.map(source))
+    end
+
+    # The workspace files without a source map, in workspace order. The set
+    # gets built again only when files were added to or removed from the
+    # workspace.
+    #
+    # @return [Set<String>]
+    def unmapped_filenames
+      return @unmapped_filenames if @unmapped_filenames && @unmapped_generation == workspace.generation
+
+      @unmapped_generation = workspace.generation
+      @unmapped_filenames = workspace.filenames.reject { |filename| source_map_hash.key?(filename) }.to_set
+    end
+
+    # @param filename [String]
+    # @param source_map [SourceMap]
+    # @return [SourceMap]
+    def store_source_map filename, source_map
+      source_map_hash[filename] = source_map
+      @unmapped_filenames&.delete filename
+      source_map
+    end
+
+    # @param filename [String]
+    # @return [void]
+    def drop_source_map filename
+      source_map_hash.delete filename
+      @unmapped_filenames&.add filename if workspace.has_file?(filename)
     end
 
     # Evict the source of a mapped workspace file that is not open.
