@@ -93,6 +93,7 @@ describe Solargraph::LanguageServer::Host do
     allow(library).to receive_messages(contain?: true, synchronized?: true, mapped?: true)
     allow(library).to receive(:attach)
     allow(library).to receive(:merge)
+    allow(library).to receive(:open_file)
     allow(library).to receive(:catalog)
     # @todo Smelly instance variable access
     host.instance_variable_set(:@libraries, [library])
@@ -180,6 +181,57 @@ describe Solargraph::LanguageServer::Host do
     expect do
       host.document_symbols(file_uri)
     end.not_to raise_error
+  end
+
+  describe 'open files' do
+    let(:host) { described_class.new }
+    let(:dir) { File.absolute_path('spec/fixtures/workspace') }
+    let(:thing) { File.join(dir, 'lib', 'thing.rb') }
+    let(:other) { File.join(dir, 'lib', 'other.rb') }
+    let(:library) { host.libraries.first }
+
+    def uri_for file
+      Solargraph::LanguageServer::UriHelpers.file_to_uri(file)
+    end
+
+    before do
+      host.prepare(dir)
+    end
+
+    after do
+      host.stop
+    end
+
+    it 'tracks every open file in the library' do
+      host.open(uri_for(thing), File.read(thing), 1)
+      host.open(uri_for(other), File.read(other), 1)
+      expect(library.open_filenames).to contain_exactly(thing, other)
+    end
+
+    it 'keeps the other open files when one closes' do
+      host.open(uri_for(thing), File.read(thing), 1)
+      host.open(uri_for(other), File.read(other), 1)
+      host.document_symbols(uri_for(thing))
+      host.close(uri_for(thing))
+      expect(library.open_filenames).to contain_exactly(other)
+      expect(library.current).to be_nil
+    end
+
+    it 'closes the file in the library' do
+      host.open(uri_for(thing), File.read(thing), 1)
+      host.document_symbols(uri_for(thing))
+      host.close(uri_for(thing))
+      expect(library.open?(thing)).to be(false)
+      expect(library.source_map_hash).to have_key(thing)
+    end
+
+    it 'drops a closed file outside of any workspace' do
+      host.open('file:///file.rb', 'class Foo; end', 1)
+      expect(host.document_symbols('file:///file.rb')).not_to be_empty
+      host.close('file:///file.rb')
+      expect(host.generic_library.open?('/file.rb')).to be(false)
+      expect(host.generic_library.source_map_hash).not_to have_key('/file.rb')
+    end
   end
 
   it 'responds with empty diagnostics for unopened files' do

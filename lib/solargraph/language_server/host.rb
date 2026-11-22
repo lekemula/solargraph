@@ -171,6 +171,7 @@ module Solargraph
         src = sources.open(uri, text, version)
         libraries.each do |lib|
           lib.merge src
+          lib.open_file uri_to_file(uri)
         end
         diagnoser.schedule uri
       end
@@ -179,6 +180,7 @@ module Solargraph
       # @return [void]
       def open_from_disk uri
         sources.open_from_disk(uri)
+        libraries.each { |lib| lib.open_file uri_to_file(uri) }
         diagnoser.schedule uri
       end
 
@@ -197,6 +199,9 @@ module Solargraph
       def close uri
         logger.info "Closing #{uri}"
         sources.close uri
+        filename = uri_to_file(uri)
+        libraries.each { |lib| lib.close filename }
+        @generic_library&.close filename
         diagnoser.schedule uri
       end
 

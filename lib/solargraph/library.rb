@@ -32,6 +32,8 @@ module Solargraph
       @total = nil
       # @type [Source, nil]
       @current = nil
+      # @type [Set<String>]
+      @open_filenames = Set.new
       @sync_count = 0
     end
 
@@ -52,20 +54,21 @@ module Solargraph
     #
     # The attached source does not need to be a part of the workspace. The
     # library will include it in the ApiMap while it's attached. Only one
-    # source can be attached to the library at a time.
+    # source can be attached to the library at a time. Attaching a source also
+    # marks its file as open.
     #
     # @param source [Source, nil]
     # @return [void]
     def attach source
       # @type [String, nil]
       current_filename = @current&.filename
-      if @current && (!source || current_filename != source.filename) && current_filename && source_map_hash.key?(current_filename) && !workspace.has_file?(current_filename)
-        source_map_hash.delete current_filename
-        source_map_external_require_hash.delete current_filename
-        @external_requires = nil
+      if @current && (!source || current_filename != source.filename) && current_filename && !workspace.has_file?(current_filename)
+        forget_source_map current_filename
       end
       changed = source && @current != source
       @current = source
+      opened = source&.filename
+      @open_filenames.add opened if opened
       maybe_map @current
       catalog if changed
     end
@@ -77,7 +80,30 @@ module Solargraph
     def attached? filename
       !@current.nil? && @current.filename == filename
     end
-    alias open? attached?
+
+    # True if the specified file is open in the editor, attached or not.
+    #
+    # @param filename [String]
+    # @return [Boolean]
+    def open? filename
+      attached?(filename) || @open_filenames.include?(filename)
+    end
+
+    # Mark a file as open in the editor. Open files stay tracked until they get
+    # closed, whichever file is attached.
+    #
+    # @param filename [String]
+    # @return [void]
+    def open_file filename
+      @open_filenames.add filename
+    end
+
+    # The files that are open in the editor.
+    #
+    # @return [Set<String>]
+    def open_filenames
+      @open_filenames.dup.freeze
+    end
 
     # Detach the specified file if it is currently attached to the library.
     #
@@ -142,15 +168,20 @@ module Solargraph
     end
 
     # Close a file in the library. Closing a file will make it unavailable for
-    # checkout although it may still exist in the workspace.
+    # checkout although it may still exist in the workspace. A closed file that
+    # is not part of the workspace gets dropped from the source maps.
     #
     # @param filename [String]
     # @return [void]
     def close filename
-      return unless @current&.filename == filename
+      return unless open?(filename)
 
-      @current = nil
-      catalog unless workspace.has_file?(filename)
+      @open_filenames.delete filename
+      @current = nil if attached?(filename)
+      return if workspace.has_file?(filename)
+
+      forget_source_map filename
+      catalog
     end
 
     # Get completion suggestions at the specified file and location.
@@ -516,6 +547,16 @@ module Solargraph
     # @return [Hash{String => Array<String>}]
     def source_map_external_require_hash
       @source_map_external_require_hash ||= {}
+    end
+
+    # @param filename [String]
+    # @return [void]
+    def forget_source_map filename
+      return unless source_map_hash.key?(filename)
+
+      source_map_hash.delete filename
+      source_map_external_require_hash.delete filename
+      @external_requires = nil
     end
 
     # @param source_map [SourceMap]

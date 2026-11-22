@@ -226,6 +226,84 @@ describe Solargraph::Library do
     expect(pins.map(&:path)).to include('Foo#bar')
   end
 
+  describe 'open files' do
+    let(:library) { described_class.new }
+    let(:script) { Solargraph::Source.load_string('class Script; end', 'script.rb', 0) }
+    let(:other) { Solargraph::Source.load_string('class Other; end', 'other.rb', 0) }
+
+    it 'tracks files opened without attaching them' do
+      library.open_file 'script.rb'
+      library.open_file 'other.rb'
+      expect(library.open_filenames).to contain_exactly('script.rb', 'other.rb')
+      expect(library.open?('other.rb')).to be(true)
+      expect(library.current).to be_nil
+    end
+
+    it 'tracks attached files as open' do
+      library.attach script
+      expect(library.open_filenames).to contain_exactly('script.rb')
+    end
+
+    it 'keeps every open file when switching the attached file' do
+      library.attach script
+      library.attach other
+      expect(library.open_filenames).to contain_exactly('script.rb', 'other.rb')
+      expect(library.open?('script.rb')).to be(true)
+      expect(library.current).to be(other)
+    end
+
+    it 'does not expose its internal set' do
+      library.open_file 'script.rb'
+      expect { library.open_filenames << 'other.rb' }.to raise_error(FrozenError)
+    end
+
+    it 'forgets a closed file' do
+      library.attach script
+      library.open_file 'other.rb'
+      library.close 'script.rb'
+      expect(library.open_filenames).to contain_exactly('other.rb')
+      expect(library.open?('script.rb')).to be(false)
+      expect(library.current).to be_nil
+    end
+
+    it 'keeps the attached file when another file closes' do
+      library.attach script
+      library.open_file 'other.rb'
+      library.close 'other.rb'
+      expect(library.current).to be(script)
+      expect(library.open_filenames).to contain_exactly('script.rb')
+    end
+
+    it 'drops a closed file outside the workspace from the source maps' do
+      library.attach script
+      library.close 'script.rb'
+      expect(library.source_map_hash).not_to have_key('script.rb')
+      expect(library.document_symbols('script.rb')).to be_empty
+    end
+
+    it 'keeps a closed workspace file in the source maps' do
+      Dir.mktmpdir do |temp_dir_path|
+        workspace_path = File.realpath(temp_dir_path)
+        file_path = File.join(workspace_path, 'file.rb')
+        File.write(file_path, 'class Foo; end')
+        library = described_class.load(workspace_path)
+        source = Solargraph::Source.load(file_path)
+        library.merge source
+        library.attach source
+        library.close file_path
+        expect(library.open?(file_path)).to be(false)
+        expect(library.source_map_hash).to have_key(file_path)
+      end
+    end
+
+    it 'ignores closing a file that is not open' do
+      library.attach script
+      library.send(:sync_catalog)
+      library.close 'unknown.rb'
+      expect(library.synchronized?).to be(true)
+    end
+  end
+
   describe '#references_from' do
     it 'collects references to a new method on a constant from assignment of Class.new' do
       workspace = Solargraph::Workspace.new('*')
