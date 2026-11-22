@@ -26,8 +26,10 @@ module Solargraph
     #   the base must be ALL able to independently provide this
     #   type.  The former is useful during completion, but the
     #   latter is best for typechecking at higher levels.
-    #
-    def initialize pins: [], loose_unions: true
+    # @param external [External, nil] The gems to map, by default the ones
+    #   the workspace of the cataloged bench reaches
+    def initialize pins: [], loose_unions: true, external: nil
+      @external = external
       @source_map_hash = {}
       @cache = Cache.new
       @loose_unions = loose_unions
