@@ -42,8 +42,6 @@ module Solargraph
     # mean that future ones will.  Consider the effect of
     # break/next/return/raise/etc. on control flow.
     class CompoundStatement < Pin::Base
-      attr_reader :node
-
       # @param node [Parser::AST::Node, nil]
       # @param [Hash{Symbol => Object}] splat
       def initialize node: nil, **splat
@@ -51,9 +49,45 @@ module Solargraph
         @node = node
       end
 
-      def detach_nodes!
-        @node = nil
+      # @sg-ignore nil once the source changed on disk after eviction
+      # @return [Parser::AST::Node]
+      def node
+        NodeRef.resolve(@node)
+      end
+
+      # Where the statement ends, for flow-sensitive typing
+      #
+      # @return [Position, nil]
+      def end_position
+        return @end_position if @end_position
+        current = @node
+        # @sg-ignore flow sensitive typing needs to handle is_a? in modifiers
+        Position.new(current.loc.last_line, current.loc.last_column) if current.is_a?(::Parser::AST::Node)
+      end
+
+      def detach_nodes! reload_from: nil
+        if reloads_node?
+          @node = NodeRef.detach(@node, reload_from)
+        else
+          @end_position = end_position
+          @node = nil
+        end
         super
+      end
+
+      protected
+
+      # @return [Parser::AST::Node, NodeRef, nil]
+      def stored_node
+        @node
+      end
+
+      private
+
+      # True if the pin parses its node again after it was detached. Other
+      # compound statements only keep their end position.
+      def reloads_node?
+        false
       end
     end
   end

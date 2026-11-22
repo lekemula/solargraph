@@ -5,12 +5,6 @@ module Solargraph
     class Block < Callable
       include Breakable
 
-      # @return [Parser::AST::Node]
-      attr_reader :receiver
-
-      # @return [Parser::AST::Node]
-      attr_reader :node
-
       # @param receiver [Parser::AST::Node, nil]
       # @param node [Parser::AST::Node, nil]
       # @param context [ComplexType, nil]
@@ -25,9 +19,14 @@ module Solargraph
         @name = '<block>'
       end
 
-      def detach_nodes!
-        @node = nil
-        @receiver = nil
+      # @sg-ignore nil once the source changed on disk after eviction
+      # @return [Parser::AST::Node]
+      def receiver
+        NodeRef.resolve(@receiver)
+      end
+
+      def detach_nodes! reload_from: nil
+        @receiver = NodeRef.detach(@receiver, reload_from)
         super
       end
 
@@ -63,7 +62,9 @@ module Solargraph
       # @param api_map [ApiMap]
       # @return [::Array<ComplexType>]
       def typify_parameters api_map
-        chain = Parser.chain(receiver, filename, node)
+        block_receiver = receiver
+        return parameters.map { ComplexType::UNDEFINED } if block_receiver.nil?
+        chain = Parser.chain(block_receiver, filename, node)
         # @sg-ignore Need to add nil check here
         clip = api_map.clip_at(location.filename, location.range.start)
         locals = clip.locals - [self]
@@ -99,13 +100,18 @@ module Solargraph
 
       private
 
+      def reloads_node?
+        true
+      end
+
       # @param api_map [ApiMap]
       # @return [ComplexType]
       def maybe_rebind api_map
-        return ComplexType::UNDEFINED unless receiver
+        block_receiver = receiver
+        return ComplexType::UNDEFINED unless block_receiver
 
         # @sg-ignore Need to add nil check here
-        chain = Parser.chain(receiver, location.filename, node)
+        chain = Parser.chain(block_receiver, location.filename, node)
         # @sg-ignore Need to add nil check here
         locals = api_map.source_map(location.filename).locals_at(location)
         # @sg-ignore Need to add nil check here

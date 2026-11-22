@@ -18,9 +18,6 @@ module Solargraph
 
       attr_writer :signatures
 
-      # @return [Parser::AST::Node]
-      attr_reader :node
-
       # @param visibility [::Symbol] :public, :protected, or :private
       # @param explicit [Boolean]
       # @param block [Pin::Signature, nil, :undefined]
@@ -71,7 +68,7 @@ module Solargraph
           visibility: combine_visibility(other),
           explicit: explicit? || other.explicit?,
           block: combine_blocks(other),
-          node: choose_node(other, :node),
+          node: choose_node(other, :stored_node),
           attribute: prefer_rbs_location(other, :attribute?),
           parameters: parameters,
           signatures: sigs,
@@ -81,15 +78,15 @@ module Solargraph
         super(other, new_attrs)
       end
 
-      def detach_nodes!
-        @node = nil
-        @signatures&.each(&:detach_nodes!)
+      def detach_nodes! reload_from: nil
+        # @param sig [Pin::Signature]
+        @signatures&.each { |sig| sig.detach_nodes!(reload_from: reload_from) }
         super
       end
 
       # @param other [Pin::Method]
       def == other
-        super && other.node == node
+        super && NodeRef.same?(stored_node, other.stored_node)
       end
 
       def transform_types &transform
@@ -515,6 +512,10 @@ module Solargraph
       end
 
       private
+
+      def reloads_node?
+        true
+      end
 
       # @param other [Pin::Method]
       # @return [Array<Pin::Signature>]

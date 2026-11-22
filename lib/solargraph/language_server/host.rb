@@ -170,8 +170,8 @@ module Solargraph
       def open uri, text, version
         src = sources.open(uri, text, version)
         libraries.each do |lib|
-          lib.merge src
           lib.open_file uri_to_file(uri)
+          lib.merge src
         end
         diagnoser.schedule uri
       end
@@ -294,7 +294,8 @@ module Solargraph
         path = normalize_separators(directory) unless directory.nil?
         begin
           workspace = Solargraph::Workspace.new(path, nil, options)
-          lib = Solargraph::Library.new(workspace, name)
+          lib = Solargraph::Library.new(workspace, name, evict_sources: true)
+          sources.filenames.each { |filename| lib.open_file filename }
           lib.add_observer self
           libraries.push lib
           library_map lib
@@ -883,7 +884,7 @@ module Solargraph
       #
       # @return [void]
       def sync_library_map library
-        total = library.workspace.sources.length
+        total = library.workspace.filenames.length
         progress = Progress.new('Mapping workspace')
         begin
           progress.begin "0/#{total} files", 0

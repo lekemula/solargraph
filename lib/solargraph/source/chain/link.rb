@@ -17,9 +17,10 @@ module Solargraph
           @word = word
         end
 
+        # @param reload_from [String, nil] see Pin::Base#detach_nodes!
         # @return [self]
-        def detach_nodes!
-          @node = nil if instance_variable_defined?(:@node)
+        def detach_nodes! reload_from: nil
+          @node = NodeRef.detach(@node, reload_from) if instance_variable_defined?(:@node)
           self
         end
 

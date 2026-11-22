@@ -30,7 +30,9 @@ module Solargraph
         return if @generated
 
         @generated = true
+        # @sg-ignore @source is released only after the pins are generated
         @pins, @locals = Mapper.map(@source)
+        @source = nil
       end
     end
   end

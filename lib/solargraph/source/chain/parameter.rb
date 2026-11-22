@@ -65,6 +65,7 @@ module Solargraph
         # The index of the literal in the method call chain.
         # @return [Integer]
         def current_index
+          # @sg-ignore Need to add nil check here
           @current_index ||= method_call_chain.node.children[2..].index(literal.node)
         end
 

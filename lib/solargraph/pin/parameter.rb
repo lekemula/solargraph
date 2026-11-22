@@ -71,7 +71,7 @@ module Solargraph
         decl == :kwrestarg || hash_default?
       end
 
-      def detach_nodes!
+      def detach_nodes! reload_from: nil
         @hash_default = hash_default?
         super
       end

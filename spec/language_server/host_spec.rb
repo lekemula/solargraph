@@ -135,7 +135,7 @@ describe Solargraph::LanguageServer::Host do
     )
     # The workspace is scanned before mapping begins, but files can still be
     # added while the mapping pass is running.
-    allow(workspace).to receive(:sources).and_return [1]
+    allow(workspace).to receive(:filenames).and_return [1]
     mapped = 0
     allow(library).to receive(:next_map) do
       mapped += 1
@@ -223,6 +223,22 @@ describe Solargraph::LanguageServer::Host do
       host.close(uri_for(thing))
       expect(library.open?(thing)).to be(false)
       expect(library.source_map_hash).to have_key(thing)
+    end
+
+    it 'evicts the sources of mapped files that are not open' do
+      host.open(uri_for(thing), File.read(thing), 1)
+      Timeout.timeout(30) { sleep 0.05 until library.mapped? }
+      expect(library.source_map_hash[thing]).not_to be_evicted
+      expect(library.source_map_hash[other]).to be_evicted
+    end
+
+    it 'tells a library prepared later about files that are already open' do
+      late = described_class.new
+      late.open(uri_for(thing), File.read(thing), 1)
+      late.prepare(dir)
+      expect(late.libraries.first.open?(thing)).to be(true)
+    ensure
+      late&.stop
     end
 
     it 'drops a closed file outside of any workspace' do

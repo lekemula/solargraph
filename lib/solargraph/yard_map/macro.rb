@@ -130,7 +130,6 @@ module Solargraph
         name = chain.links.last.word
         # @sg-ignore chain.links.last is assumed to be a Chain::Call
         values = chain.links.last.arguments.map(&:node).map { |arg| Solargraph::Parser::ParserGem::NodeMethods.simple_convert(arg).to_s }
-        # @sg-ignore chain.node is assumed to exist
         code = source_map.source.code_for(chain.node)
         expanded_comment = macro_object.expand([name, *values], code)
                                        .gsub(/\n(?!@!|\s)/, "\n  ")
@@ -148,7 +147,6 @@ module Solargraph
         directives.each do |directive|
           next if VALUE_DIRECTIVES.include? directive.tag.tag_name
 
-          # @sg-ignore chain.node is assumed to exist
           comments = source_map.source.comments_for(chain.node)
           if comments&.length&.positive?
             directive.tag.text += "\n#{comments}"

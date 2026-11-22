@@ -28,6 +28,8 @@ module Solargraph
   autoload :Shell,            'solargraph/shell'
   autoload :Source,           'solargraph/source'
   autoload :SourceMap,        'solargraph/source_map'
+  autoload :SourceCache,      'solargraph/source_cache'
+  autoload :NodeRef,          'solargraph/node_ref'
   autoload :ApiMap,           'solargraph/api_map'
   autoload :Yardoc,           'solargraph/yardoc'
   autoload :YardMap,          'solargraph/yard_map'

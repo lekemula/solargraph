@@ -76,6 +76,11 @@ module Solargraph
           open_source_hash.key? uri
         end
 
+        # @return [::Array<String>] The filenames of the open sources
+        def filenames
+          open_source_hash.values.filter_map(&:filename)
+        end
+
         # @return [void]
         def clear
           open_source_hash.clear
