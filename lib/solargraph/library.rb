@@ -510,11 +510,17 @@ module Solargraph
       src = workspace.source(filename)
       return false if src.nil?
       Logging.logger.debug "Mapping #{filename}"
-      mutex.synchronize do
-        map = source_map_hash[filename] = Solargraph::SourceMap.map(src)
-        maybe_evict map
-        map
+      map = mutex.synchronize do
+        mapped = source_map_hash[filename] = Solargraph::SourceMap.map(src)
+        maybe_evict mapped
+        mapped
       end
+      # Requests made while mapping synced only the files mapped so far
+      if mapped?
+        catalog
+        sync_catalog
+      end
+      map
     end
 
     # @return [self]

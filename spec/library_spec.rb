@@ -741,6 +741,25 @@ describe Solargraph::Library do
     end
   end
 
+  describe '#next_map' do
+    it 'catalogs the workspace once every file is mapped' do
+      Dir.mktmpdir do |dir|
+        File.write File.join(dir, 'foo.rb'), "class Foo; end\n"
+        caller_file = File.join(dir, 'caller.rb')
+        File.write caller_file, "Foo\n"
+        library = described_class.load(dir)
+        library.attach Solargraph::Source.load(caller_file)
+        # A request before the workspace is mapped catalogs only the open file
+        expect(library.definitions_at(caller_file, 0, 1)).to be_empty
+
+        nil while library.next_map
+
+        expect(library).to be_synchronized
+        expect(library.definitions_at(caller_file, 0, 1).map(&:path)).to eq(['Foo'])
+      end
+    end
+  end
+
   context 'when unsynchronized' do
     let(:library) { described_class.load File.absolute_path(File.join('spec', 'fixtures', 'workspace')) }
     let(:good_file) { File.join(library.workspace.directory, 'lib', 'thing.rb') }
